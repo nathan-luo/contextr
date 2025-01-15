@@ -1,0 +1,15 @@
+[project]
+name = "contextr"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "prompt-toolkit>=3.0.48",
+    "pyperclip>=1.9.0",
+    "rich>=13.9.4",
+    "typer>=0.15.1",
+]
+
+[project.scripts]
+contextr = "contextr.cli:main"
