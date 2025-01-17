@@ -16,6 +16,7 @@ class ContextManager:
 
     def __init__(self):
         self.files: Set[str] = set()
+        self.watched_patterns: Set[str] = set()
         self.base_dir = Path.cwd()
         self.state_dir = self.base_dir / ".contextr"
         self.state_file = self.state_dir / "state.json"
@@ -137,7 +138,7 @@ class ContextManager:
         return created_dir, updated_gitignore
 
     def _load_state(self) -> None:
-        """Load state (files) from a JSON file if it exists."""
+        """Load state (files and watched patterns) from a JSON file if it exists."""
         if self.state_file.exists():
             try:
                 with open(self.state_file, "r", encoding="utf-8") as f:
@@ -145,18 +146,20 @@ class ContextManager:
                 self.files = set(
                     make_absolute(p, self.base_dir) for p in data.get("files", [])
                 )
+                self.watched_patterns = set(data.get("watched_patterns", []))
             except Exception as e:
                 console.print(f"[red]Error loading state: {e}[/red]")
 
     def _save_state(self) -> None:
-        """Save current state (files) to a JSON file."""
+        """Save current state (files and watched patterns) to a JSON file."""
         self.state_dir.mkdir(parents=True, exist_ok=True)
         try:
             with open(self.state_file, "w", encoding="utf-8") as f:
                 data = {
                     "files": [
                         make_relative(p, self.base_dir) for p in sorted(self.files)
-                    ]
+                    ],
+                    "watched_patterns": sorted(self.watched_patterns)  # Save watched patterns
                 }
                 json.dump(data, f, indent=4)
         except Exception as e:
@@ -255,3 +258,96 @@ class ContextManager:
         if relative:
             return [make_relative(f, self.base_dir) for f in sorted(self.files)]
         return sorted(self.files)
+
+    def unwatch_paths(self, patterns: List[str]) -> Tuple[int, int]:
+        """
+        Remove paths from watch list but keep existing files.
+
+        Args:
+            patterns: List of patterns to stop watching
+
+        Returns:
+            Tuple[int, int]: (Number of patterns removed, Number of files kept)
+        """
+        removed_patterns = set()
+        affected_files = set()
+
+        for pattern in patterns:
+            if pattern in self.watched_patterns:
+                removed_patterns.add(pattern)
+                # Count files that were added by this pattern
+                abs_paths = normalize_paths([pattern], self.base_dir, self.ignore_manager)
+                for path in abs_paths:
+                    if path in self.files:
+                        affected_files.add(path)
+
+        self.watched_patterns -= removed_patterns
+        self._save_state()
+
+        return len(removed_patterns), len(affected_files)
+
+    def watch_paths(self, patterns: List[str]) -> Tuple[int, int]:
+        """
+        Add paths to watch list and perform initial file addition.
+        Filters out ignored patterns before adding to watch list.
+
+        Args:
+            patterns: List of file/directory patterns to watch
+
+        Returns:
+            Tuple[int, int]: (Number of new patterns, Number of files added)
+        """
+        # Filter out patterns that would be entirely ignored
+        valid_patterns = []
+        for pattern in patterns:
+            # Normalize the pattern path
+            abs_pattern = make_absolute(pattern, self.base_dir)
+            # If the pattern itself isn't ignored, add it
+            if not self.ignore_manager.should_ignore(abs_pattern):
+                valid_patterns.append(pattern)
+
+        # Only add non-ignored patterns to watch list
+        new_patterns = set(valid_patterns) - self.watched_patterns
+        self.watched_patterns.update(new_patterns)
+
+        # Do initial file addition (ignore patterns are respected in add_files)
+        added_count = self.add_files(valid_patterns)
+
+        self._save_state()
+        return len(new_patterns), added_count
+
+
+    def refresh_watched(self) -> Dict[str, int]:
+        """
+        Refresh all watched paths to detect changes.
+        Only includes non-ignored files in the refresh.
+
+        Returns:
+            Dict[str, int]: Statistics about changes (added, removed files)
+        """
+        stats = {"added": 0, "removed": 0}
+        old_files = self.files.copy()
+
+        # Clear files that came from watched patterns
+        self.files.clear()
+
+        # Re-add all files from watched patterns, respecting ignore patterns
+        valid_patterns = [p for p in self.watched_patterns
+                          if not self.ignore_manager.should_ignore(make_absolute(p, self.base_dir))]
+
+        for pattern in valid_patterns:
+            added = self.add_files([pattern])
+            stats["added"] += added
+
+        # Count removed files
+        stats["removed"] = len(old_files - self.files)
+
+        return stats
+
+
+    def list_watched(self) -> List[str]:
+        """
+        Get list of currently watched patterns, excluding those that would be ignored.
+        """
+        return sorted(p for p in self.watched_patterns
+                      if not self.ignore_manager.should_ignore(make_absolute(p, self.base_dir)))

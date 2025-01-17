@@ -170,6 +170,117 @@ def init():
     else:
         console.print("[yellow]No .gitignore file found to update[/yellow]")
 
+
+@app.command()
+def watch(patterns: List[str] = typer.Argument(..., help="File patterns to watch (supports glob)")):
+    """Add files/directories to watch list for continuous monitoring."""
+    new_patterns, added_files = context_manager.watch_paths(patterns)
+
+    if new_patterns > 0:
+        console.print(
+            f"[green]Added [bold]{new_patterns}[/bold] new pattern(s) to watch list.[/green]"
+        )
+    else:
+        console.print("[yellow]All patterns were already being watched.[/yellow]")
+
+    if added_files > 0:
+        console.print(
+            f"[green]Initially added [bold]{added_files}[/bold] files to context.[/green]"
+        )
+
+    console.print(get_file_tree(context_manager.files, context_manager.base_dir))
+
+
+@app.command()
+def unwatch(patterns: List[str] = typer.Argument(..., help="File patterns to stop watching")):
+    """Remove patterns from watch list but keep existing files."""
+    removed_patterns, kept_files = context_manager.unwatch_paths(patterns)
+
+    if removed_patterns > 0:
+        console.print(
+            f"[green]Removed [bold]{removed_patterns}[/bold] pattern(s) from watch list.[/green]"
+        )
+        console.print(
+            f"[blue]Keeping [bold]{kept_files}[/bold] existing files in context.[/blue]"
+        )
+    else:
+        console.print("[yellow]No matching patterns were being watched.[/yellow]")
+
+
+@app.command(name="watch-list")
+def watch_list():
+    """List all patterns currently being watched."""
+    patterns = context_manager.list_watched()
+    if patterns:
+        table = Table("Watched Patterns", style="bold green")
+        for pattern in patterns:
+            table.add_row(pattern)
+        console.print(table)
+    else:
+        console.print("[yellow]No patterns are currently being watched[/yellow]")
+
+
+@app.command(name="rexp")
+def refresh_and_export(
+        relative: bool = typer.Option(True, help="Export relative paths instead of absolute"),
+        full: bool = typer.Option(True, help="Include file contents in the export"),
+):
+    """Refresh watched paths and immediately export the results."""
+    # First refresh
+    stats = context_manager.refresh_watched()
+
+    if stats["added"] > 0 or stats["removed"] > 0:
+        if stats["added"] > 0:
+            console.print(
+                f"[green]Added [bold]{stats['added']}[/bold] new files.[/green]"
+            )
+        if stats["removed"] > 0:
+            console.print(
+                f"[yellow]Removed [bold]{stats['removed']}[/bold] files that no longer exist.[/yellow]"
+            )
+    else:
+        console.print("[blue]No changes detected in watched paths.[/blue]")
+
+    # Then export
+    if not context_manager.files:
+        console.print("[red]No files in context to export![/red]")
+        return
+
+    # Format and export the content
+    output_text = format_export_content(
+        context_manager.files,
+        context_manager.base_dir,
+        relative=relative,
+        include_contents=full
+    )
+
+    # Copy to clipboard
+    pyperclip.copy(output_text)
+
+    console.print(
+        f"[green]Exported {len(context_manager.files)} files to clipboard "
+        f"{'with contents' if full else '(paths only)'}![/green]"
+    )
+
+@app.command()
+def refresh():
+    """Update context by refreshing all watched paths."""
+    stats = context_manager.refresh_watched()
+
+    if stats["added"] > 0 or stats["removed"] > 0:
+        if stats["added"] > 0:
+            console.print(
+                f"[green]Added [bold]{stats['added']}[/bold] new files.[/green]"
+            )
+        if stats["removed"] > 0:
+            console.print(
+                f"[yellow]Removed [bold]{stats['removed']}[/bold] files that no longer exist.[/yellow]"
+            )
+        console.print("\nCurrent context:")
+        console.print(get_file_tree(context_manager.files, context_manager.base_dir))
+    else:
+        console.print("[blue]No changes detected in watched paths.[/blue]")
+
 def main():
     """Entrypoint for the CLI."""
     app()

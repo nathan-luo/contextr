@@ -13,3 +13,4 @@ dependencies = [
 
 [project.scripts]
 contextr = "contextr.cli:main"
+ctxr = "contextr.cli:main"
