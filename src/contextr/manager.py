@@ -351,3 +351,122 @@ class ContextManager:
         """
         return sorted(p for p in self.watched_patterns
                       if not self.ignore_manager.should_ignore(make_absolute(p, self.base_dir)))
+
+    def save_state_as(self, state_name: str) -> bool:
+        """
+        Save current state to a named file in the states directory.
+
+        Args:
+            state_name: Name of the state to save
+
+        Returns:
+            bool: True if save was successful
+        """
+        states_dir = self.state_dir / "states"
+        states_dir.mkdir(parents=True, exist_ok=True)
+
+        # Ensure state name is valid
+        state_name = state_name.replace(" ", "_")
+        if not state_name.endswith(".json"):
+            state_name += ".json"
+
+        state_path = states_dir / state_name
+
+        try:
+            with open(state_path, "w", encoding="utf-8") as f:
+                data = {
+                    "files": [make_relative(p, self.base_dir) for p in sorted(self.files)],
+                    "watched_patterns": sorted(self.watched_patterns),
+                    "ignore_patterns": sorted(self.ignore_manager.patterns),
+                    "negation_patterns": sorted(self.ignore_manager.negation_patterns)
+                }
+                json.dump(data, f, indent=4)
+            return True
+        except Exception as e:
+            console.print(f"[red]Error saving state '{state_name}': {e}[/red]")
+            return False
+
+    def load_state(self, state_name: str) -> bool:
+        """
+        Load a previously saved state.
+
+        Args:
+            state_name: Name of the state to load
+
+        Returns:
+            bool: True if load was successful
+        """
+        states_dir = self.state_dir / "states"
+
+        # Ensure state name has .json extension
+        if not state_name.endswith(".json"):
+            state_name += ".json"
+
+        state_path = states_dir / state_name
+
+        if not state_path.exists():
+            console.print(f"[red]State file not found: {state_name}[/red]")
+            return False
+
+        try:
+            with open(state_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Load files
+            self.files = set(make_absolute(p, self.base_dir) for p in data.get("files", []))
+
+            # Load watched patterns
+            self.watched_patterns = set(data.get("watched_patterns", []))
+
+            # Load ignore patterns
+            self.ignore_manager.patterns = set(data.get("ignore_patterns", []))
+            self.ignore_manager.negation_patterns = set(data.get("negation_patterns", []))
+            self.ignore_manager.save_patterns()  # Update the .ignore file
+
+            self._save_state()  # Save as current state
+            return True
+        except Exception as e:
+            console.print(f"[red]Error loading state '{state_name}': {e}[/red]")
+            return False
+
+    def list_saved_states(self) -> List[str]:
+        """
+        Get list of all saved states.
+
+        Returns:
+            List[str]: Names of saved states
+        """
+        states_dir = self.state_dir / "states"
+        if not states_dir.exists():
+            return []
+
+        return [f.stem for f in states_dir.glob("*.json")]
+
+    def delete_state(self, state_name: str) -> bool:
+        """
+        Delete a saved state file.
+
+        Args:
+            state_name: Name of the state to delete
+
+        Returns:
+            bool: True if deletion was successful
+        """
+        states_dir = self.state_dir / "states"
+
+        # Ensure state name has .json extension
+        if not state_name.endswith(".json"):
+            state_name += ".json"
+
+        state_path = states_dir / state_name
+
+        if not state_path.exists():
+            console.print(f"[red]State file not found: {state_name}[/red]")
+            return False
+
+        try:
+            state_path.unlink()
+            return True
+        except Exception as e:
+            console.print(f"[red]Error deleting state '{state_name}': {e}[/red]")
+            return False

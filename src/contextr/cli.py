@@ -281,6 +281,54 @@ def refresh():
     else:
         console.print("[blue]No changes detected in watched paths.[/blue]")
 
+
+@app.command(name="save-as")
+def save_state_as(
+        name: str = typer.Argument(..., help="Name for the saved state")
+):
+    """Save current context state to a named file."""
+    if context_manager.save_state_as(name):
+        console.print(f"[green]Successfully saved state as: {name}[/green]")
+    else:
+        console.print(f"[red]Failed to save state: {name}[/red]")
+
+
+@app.command(name="load")
+def load_state(
+        name: str = typer.Argument(..., help="Name of the state to load")
+):
+    """Load a previously saved context state."""
+    if context_manager.load_state(name):
+        console.print(f"[green]Successfully loaded state: {name}[/green]")
+        console.print("\nCurrent context:")
+        console.print(get_file_tree(context_manager.files, context_manager.base_dir))
+    else:
+        console.print(f"[red]Failed to load state: {name}[/red]")
+
+
+@app.command(name="states")
+def list_states():
+    """List all saved states."""
+    states = context_manager.list_saved_states()
+    if states:
+        table = Table("Saved States", style="bold green")
+        for state in sorted(states):
+            table.add_row(state)
+        console.print(table)
+    else:
+        console.print("[yellow]No saved states found[/yellow]")
+
+
+@app.command(name="delete-state")
+def delete_state(
+        name: str = typer.Argument(..., help="Name of the state to delete")
+):
+    """Delete a saved state."""
+    if context_manager.delete_state(name):
+        console.print(f"[green]Successfully deleted state: {name}[/green]")
+    else:
+        console.print(f"[red]Failed to delete state: {name}[/red]")
+
 def main():
     """Entrypoint for the CLI."""
     app()

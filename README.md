@@ -1,185 +1,209 @@
 # contextr
 
-contextr is a command-line tool designed to manage and export file contexts efficiently. It provides a simple interface
-for working with files and directories, allowing users to add, remove, list, search, and export file structures with
-ease. contextr also integrates with `.gitignore` to avoid managing unnecessary files and supports customizable ignore
-patterns.
+A command-line tool designed for developers to easily share their codebase with Large Language Models (LLMs). contextr
+helps you manage which files and directories you want to share, handles file content export, and lets you instantly copy
+formatted code context to your clipboard - perfect for pasting into ChatGPT, Claude, or other AI chat interfaces.
 
----
-
-## Features
-
-- **Add or Remove Files and Directories**: Manage a list of files or directories with support for glob patterns.
-- **Export Context**: Export the file context as a tree view or include file contents directly.
-- **Ignore Management**: Define custom ignore patterns or sync with `.gitignore`.
-- **Tree Visualization**: View the file hierarchy in a visually appealing format using `rich`.
-- **Clipboard Integration**: Copy the exported context directly to the clipboard.
-
----
+Think of it as "git add" but for AI conversations - select the files you want your AI assistant to see, and export them
+in the right format with a single command.
 
 ## Installation
 
-### Prerequisites
-
-- Python >= 3.12
-
-### Using `pip`
-
-```bash
-pip install contextr
-```
-
-### From Source
-
 1. Clone the repository:
 
-   ```bash
-   git clone https://github.com/your-username/contextr.git
-   cd contextr
-   ```
+```bash
+git clone https://github.com/your-username/contextr.git
+cd contextr
+```
 
-2. Install the dependencies:
+2. Install in development mode:
 
-   ```bash
-   pip install .
-   ```
+```bash
+pip install -e .
+```
 
----
+3. Add to PATH:
 
-## Usage
+- For Linux/Mac: Add to `~/.bashrc` or `~/.zshrc`:
+  ```bash
+  export PATH="$PATH:$HOME/.local/bin"
+  ```
+- For Windows: Add `%USERPROFILE%\AppData\Local\Programs\Python\Python3x\Scripts` to system PATH
 
-contextr uses a command-line interface powered by `typer`. Below are examples of common commands:
+## Quick Start
 
-### Initialize
+> Note: You can use `ctxr` as a shorter alias for all `contextr` commands.
+
+1. Initialize contextr in your project:
 
 ```bash
 contextr init
 ```
 
-Creates the `.contextr` directory and updates `.gitignore` to ignore it.
-
-### Add Files
+2. Add files to track:
 
 ```bash
 contextr add "src/**/*.py"
 ```
 
-Adds all Python files in the `src` directory and its subdirectories to the context.
-
-### List Context
+3. Export your context:
 
 ```bash
-contextr list
+contextr export
 ```
 
-Displays the current file context as a tree view.
+## Commands
 
-### Export Context
+### Context Management
 
-```bash
-contextr export --relative --full
-```
+- `init`: Initialize contextr in current directory
+  ```bash
+  contextr init
+  ```
 
-Exports the context to the clipboard, including file contents and using relative paths.
+- `add <patterns>`: Add files/directories to context
+  ```bash
+  contextr add "src/*.py" "docs/*.md"
+  ```
 
-### Manage Ignore Patterns
+- `remove <patterns>`: Remove files from context
+  ```bash
+  contextr remove "tests/*.py"
+  ```
 
-- Add a pattern to `.ignore`:
+- `list`: Display current context as tree
+  ```bash
+  contextr list
+  ```
 
+- `clear`: Remove all files from context
+  ```bash
+  contextr clear
+  ```
+
+- `search <keyword>`: Find files in context
+  ```bash
+  contextr search "config"
+  ```
+
+### Watch Mode
+
+- `watch <patterns>`: Add paths to watch list
+  ```bash
+  contextr watch "src/**/*.py"
+  ```
+
+- `unwatch <patterns>`: Stop watching paths
+  ```bash
+  contextr unwatch "src/tests"
+  ```
+
+- `watch-list`: Show watched patterns
+  ```bash
+  contextr watch-list
+  ```
+
+- `refresh`: Update context from watched paths
+  ```bash
+  contextr refresh
+  ```
+
+### Ignore Management
+
+- `ignore <pattern>`: Add pattern to ignore list
   ```bash
   contextr ignore "*.tmp"
   ```
 
-- Remove a pattern from `.ignore`:
-
+- `unignore <pattern>`: Remove pattern from ignore list
   ```bash
   contextr unignore "*.tmp"
   ```
 
-- Sync patterns from `.gitignore`:
+- `ignore-list`: Show ignored patterns
+  ```bash
+  contextr ignore-list
+  ```
 
+- `gitignore-sync`: Sync patterns from .gitignore
   ```bash
   contextr gitignore-sync
   ```
 
-### Clear Context
+### Export
+
+- `export`: Export context to clipboard
+  ```bash
+  contextr export --relative --full
+  ```
+
+- `rexp`: Refresh watched paths and export
+  ```bash
+  contextr rexp --relative --full
+  ```
+
+### State Management
+
+- `save-as <name>`: Save current context state
+  ```bash
+  contextr save-as dev-setup
+  ```
+
+- `load <name>`: Load saved context state
+  ```bash
+  contextr load dev-setup
+  ```
+
+- `states`: List saved states
+  ```bash
+  contextr states
+  ```
+
+- `delete-state <name>`: Delete saved state
+  ```bash
+  contextr delete-state old-setup
+  ```
+
+## Example Workflow
 
 ```bash
-contextr clear
+# Initialize in project (using either command)
+contextr init
+# or
+ctxr init
+
+# Add source files to watch
+ctxr watch "src/**/*.py"
+
+# Add documentation
+contextr add "docs/*.md"
+
+# Check current context
+contextr list
+
+# Export for sharing
+contextr export --full
+
+# Save the state
+contextr save-as feature-setup
+
+# Later, restore the state
+contextr load feature-setup
 ```
 
-Clears all files from the context.
+## Features
 
-### Search Context
+- File tree visualization
+- Clipboard integration
+- Git-style ignore patterns
+- Watch mode for auto-updates
+- State management
+- Relative/absolute path support
 
-```bash
-contextr search "keyword"
-```
+## Requirements
 
-Searches for files in the context containing the specified keyword in their paths.
-
-### Version
-
-```bash
-contextr version
-```
-
-Displays the current version of contextr.
-
----
-
-## Configuration
-
-contextr maintains its state in a `.contextr` directory in the root of your project. The `.ignore` file inside
-`.contextr` allows you to define patterns for excluding files or directories.
-
----
-
-## Development
-
-1. Install development dependencies:
-
-   ```bash
-   pip install -r requirements-dev.txt
-   ```
-
-2. Run tests:
-
-   ```bash
-   pytest
-   ```
-
----
-
-## Roadmap
-
-- Support for additional export formats (JSON, YAML, Markdown).
-- Interactive CLI mode for context management.
-- Integration with cloud storage for exporting contexts.
-
----
-
-## Contributing
-
-Contributions are welcome! To contribute:
-
-1. Fork the repository.
-2. Create a feature branch.
-3. Submit a pull request with a detailed description of your changes.
-
----
+- Python >= 3.12
 
 ## License
 
-This project is licensed under the MIT License. See the `LICENSE` file for details.
-
----
-
-## Acknowledgments
-
-- Built with love using `typer`, `rich`, and `pyperclip`.
-
----
-
-Start managing your file contexts today with contextr!
-
+MIT License
