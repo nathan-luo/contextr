@@ -1,8 +1,11 @@
 import os
 from pathlib import Path
 from typing import Set, Dict, List
+import re
 from rich.tree import Tree
 from rich.console import Console
+from rich.syntax import Syntax
+
 
 def get_file_tree(files: Set[str], base_dir: Path) -> Tree:
     """
@@ -52,14 +55,58 @@ def get_file_tree(files: Set[str], base_dir: Path) -> Tree:
 
     return tree
 
+
+def detect_language(file_path: str) -> str:
+    """
+    Detect programming language from file extension.
+    
+    Args:
+        file_path: Path to the file
+        
+    Returns:
+        str: Language name for syntax highlighting
+    """
+    ext = os.path.splitext(file_path)[1].lower()
+    
+    # Map of file extensions to language names
+    lang_map = {
+        '.py': 'python',
+        '.js': 'javascript',
+        '.ts': 'typescript',
+        '.jsx': 'jsx',
+        '.tsx': 'tsx',
+        '.html': 'html',
+        '.css': 'css',
+        '.json': 'json',
+        '.md': 'markdown',
+        '.sql': 'sql',
+        '.c': 'c',
+        '.cpp': 'cpp',
+        '.h': 'c',
+        '.hpp': 'cpp',
+        '.rs': 'rust',
+        '.go': 'go',
+        '.java': 'java',
+        '.rb': 'ruby',
+        '.php': 'php',
+        '.sh': 'bash',
+        '.yaml': 'yaml',
+        '.yml': 'yaml',
+        '.toml': 'toml',
+    }
+    
+    return lang_map.get(ext, 'text')
+
+
 def format_export_content(
         files: Set[str],
         base_dir: Path,
         relative: bool = True,
-        include_contents: bool = False
+        include_contents: bool = True
 ) -> str:
     """
     Format context information for export.
+    Generates an LLM-friendly format with file tree and contents.
 
     Args:
         files: Set of absolute file paths
@@ -75,36 +122,53 @@ def format_export_content(
     temp_console.print(get_file_tree(files, base_dir))
     tree_text = temp_console.export_text()
 
-    # Start with tree wrapped in XML-like tags
+    # Format header with project info
+    repo_name = base_dir.name
+    total_files = len(files)
+    
     output_parts = [
-        "<file_tree>",
+        f"# Project Context: {repo_name}",
+        f"Files selected: {total_files}",
+        "",
+        "## File Structure",
+        "```",
         tree_text.strip(),
-        "</file_tree>",
-        ""  # Empty line after tree
+        "```",
+        ""
     ]
 
     # Add file contents if requested
     if include_contents:
+        output_parts.append("## File Contents")
+        
         for fpath in sorted(files):
             if relative:
-                path_str = str(Path(fpath).resolve().relative_to(base_dir))
+                try:
+                    path_str = str(Path(fpath).resolve().relative_to(base_dir))
+                except ValueError:
+                    path_str = str(Path(fpath).resolve())
             else:
                 path_str = fpath
 
-            # Add file header
-            output_parts.append(f'<file path="{path_str}">')
+            # Detect language for syntax highlighting
+            lang = detect_language(path_str)
+            
+            # Add file header with language
+            output_parts.append(f"\n### {path_str}")
+            output_parts.append(f"```{lang}")
 
             # Try to read and add file contents
             try:
                 with open(fpath, "r", encoding="utf-8") as f:
-                    output_parts.append(f.read())
+                    content = f.read()
+                    # Remove any potential backtick confusion by escaping triple backticks
+                    # This ensures code blocks terminate properly in markdown
+                    content = re.sub(r'```', '\\`\\`\\`', content)
+                    output_parts.append(content)
             except Exception as e:
-                output_parts.append(f"<Unable to read file: {fpath}> (Error: {e})")
+                output_parts.append(f"[ERROR: Unable to read file: {e}]")
 
-            # Add file footer and spacing
-            output_parts.extend([
-                "</file>",
-                ""  # Empty line between files
-            ])
+            # Close code block
+            output_parts.append("```")
 
     return "\n".join(output_parts)
