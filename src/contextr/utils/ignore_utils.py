@@ -1,13 +1,13 @@
 import os
 import re
 from pathlib import Path
-from typing import List, Set, Optional, Tuple
+from typing import List, Pattern, Set, Tuple
 
 
 class IgnoreManager:
     """
     Manages ignore patterns with improved git-style pattern support.
-    
+
     Features:
     - Full support for git-style ignore patterns
     - Support for directory-specific patterns
@@ -21,7 +21,9 @@ class IgnoreManager:
         self.ignore_file = base_dir / ".contextr" / ".ignore"
         self.patterns: Set[str] = set()
         self.negation_patterns: Set[str] = set()  # For patterns starting with !
-        self._compiled_patterns: List[Tuple[re.Pattern, bool]] = []  # (regex, is_negation)
+        self._compiled_patterns: List[
+            Tuple[Pattern[str], bool]
+        ] = []  # (regex, is_negation)
         self._load_patterns()
 
     def _load_patterns(self) -> None:
@@ -35,65 +37,65 @@ class IgnoreManager:
                             self.negation_patterns.add(line[1:])  # Remove the !
                         else:
                             self.patterns.add(line)
-        
+
         # Pre-compile patterns for efficient matching
         self._compile_patterns()
 
     def _compile_patterns(self) -> None:
         """Compile all patterns into regex for efficient matching."""
         self._compiled_patterns = []
-        
+
         # Compile normal patterns
         for pattern in self.patterns:
             regex = self._pattern_to_regex(pattern)
             self._compiled_patterns.append((regex, False))
-            
+
         # Compile negation patterns
         for pattern in self.negation_patterns:
             regex = self._pattern_to_regex(pattern)
             self._compiled_patterns.append((regex, True))
 
-    def _pattern_to_regex(self, pattern: str) -> re.Pattern:
+    def _pattern_to_regex(self, pattern: str) -> Pattern[str]:
         """
         Convert a glob pattern to a regular expression.
         Handles git-style pattern syntax.
         """
         # Clean up the pattern
-        pattern = pattern.strip().replace('\\', '/')
-        
+        pattern = pattern.strip().replace("\\", "/")
+
         # Handle directory-only patterns
-        dir_only = pattern.endswith('/')
+        dir_only = pattern.endswith("/")
         if dir_only:
             pattern = pattern[:-1]
-        
+
         # Handle patterns that start with /
-        anchored = pattern.startswith('/')
+        anchored = pattern.startswith("/")
         if anchored:
             pattern = pattern[1:]
-        
+
         # Escape regex special chars, except those we want to use (* and ?)
         pattern = re.escape(pattern)
-        
+
         # Restore wildcards and handle special cases
-        pattern = pattern.replace('\\*\\*/', '.*?/')  # **/ matches any directory
-        pattern = pattern.replace('\\*\\*', '.*?')    # ** matches any path
-        pattern = pattern.replace('\\*', '[^/]*')     # * matches any non-path chars
-        pattern = pattern.replace('\\?', '[^/]')      # ? matches one non-path char
-        
+        pattern = pattern.replace("\\*\\*/", ".*?/")  # **/ matches any directory
+        pattern = pattern.replace("\\*\\*", ".*?")  # ** matches any path
+        pattern = pattern.replace("\\*", "[^/]*")  # * matches any non-path chars
+        pattern = pattern.replace("\\?", "[^/]")  # ? matches one non-path char
+
         # Anchor the pattern appropriately
         if anchored:
-            pattern = f'^{pattern}'
+            pattern = f"^{pattern}"
         else:
-            pattern = f'(^|/){pattern}'
-        
+            pattern = f"(^|/){pattern}"
+
         # Handle directory-only patterns
         if dir_only:
-            pattern = f'{pattern}(/|$)'
+            pattern = f"{pattern}(/|$)"
         else:
-            pattern = f'{pattern}$'
-        
+            pattern = f"{pattern}$"
+
         # Compile the regex with proper flags
-        return re.compile(pattern, re.IGNORECASE if os.name == 'nt' else 0)
+        return re.compile(pattern, re.IGNORECASE if os.name == "nt" else 0)
 
     def should_ignore(self, path: str) -> bool:
         """
@@ -110,22 +112,22 @@ class IgnoreManager:
             # Convert to relative path for matching
             rel_path = str(Path(path).resolve().relative_to(self.base_dir.resolve()))
             # Normalize separators for matching
-            rel_path = rel_path.replace('\\', '/')
-            
+            rel_path = rel_path.replace("\\", "/")
+
             # Check against compiled patterns
             should_ignore = False
-            
+
             for regex, is_negation in self._compiled_patterns:
                 if regex.search(rel_path):
                     # Negation patterns override previous matches
                     should_ignore = not is_negation
-                    
+
                     # If it's a negation pattern that matched, we're done
                     if is_negation:
                         return False
-            
+
             return should_ignore
-            
+
         except (ValueError, OSError):
             # If path is outside base_dir or other error, don't ignore it
             return False
@@ -140,7 +142,7 @@ class IgnoreManager:
             self.negation_patterns.add(pattern[1:])
         else:
             self.patterns.add(pattern)
-        
+
         # Recompile patterns and save
         self._compile_patterns()
         self.save_patterns()
@@ -152,7 +154,7 @@ class IgnoreManager:
         """
         pattern = pattern.strip()
         removed = False
-        
+
         if pattern.startswith("!"):
             pattern = pattern[1:]
             if pattern in self.negation_patterns:
@@ -162,12 +164,12 @@ class IgnoreManager:
             if pattern in self.patterns:
                 self.patterns.remove(pattern)
                 removed = True
-        
+
         if removed:
             # Recompile patterns and save
             self._compile_patterns()
             self.save_patterns()
-            
+
         return removed
 
     def save_patterns(self) -> None:
@@ -183,7 +185,7 @@ class IgnoreManager:
 
     def list_patterns(self) -> List[str]:
         """Get list of current ignore patterns, including negation patterns."""
-        patterns = []
+        patterns: List[str] = []
         patterns.extend(sorted(self.patterns))
         patterns.extend(f"!{pattern}" for pattern in sorted(self.negation_patterns))
         return patterns

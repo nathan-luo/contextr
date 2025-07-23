@@ -1,29 +1,47 @@
-import json
 from pathlib import Path
-from typing import Set, List, Dict, Tuple
+from typing import Dict, List, Optional, Set, Tuple, TypeAlias
+
 from rich.console import Console
 
+from .storage import JsonStorage, StorageBackend
 from .utils.ignore_utils import IgnoreManager
-from .utils.path_utils import make_relative, make_absolute, normalize_paths
+from .utils.path_utils import make_absolute, make_relative, normalize_paths
+
+# Type aliases for clarity
+FilePath: TypeAlias = str
+Pattern: TypeAlias = str
+FileStats: TypeAlias = Dict[str, int]
 
 console = Console()
+
 
 class ContextManager:
     """
     Manages the current "context" of files and directories.
     Keeps track of files and provides methods to manipulate them.
+
+    The ContextManager uses a pluggable storage backend for persisting state.
+    By default, it uses JsonStorage which maintains backward compatibility
+    with the original file-based storage format. The storage abstraction
+    allows for easy extension to support different storage mechanisms
+    (e.g., profiles, cloud storage) without modifying core functionality.
+
+    Args:
+        storage: Optional storage backend implementation. If not provided,
+                defaults to JsonStorage using the .contextr directory.
     """
 
-    def __init__(self):
-        self.files: Set[str] = set()
-        self.watched_patterns: Set[str] = set()
-        self.base_dir = Path.cwd()
-        self.state_dir = self.base_dir / ".contextr"
-        self.state_file = self.state_dir / "state.json"
-        self.ignore_manager = IgnoreManager(self.base_dir)
+    def __init__(self, storage: Optional[StorageBackend] = None) -> None:
+        self.files: Set[FilePath] = set()
+        self.watched_patterns: Set[Pattern] = set()
+        self.base_dir: Path = Path.cwd()
+        self.state_dir: Path = self.base_dir / ".contextr"
+        self.state_file: Path = self.state_dir / "state.json"
+        self.storage: StorageBackend = storage or JsonStorage(self.state_dir)
+        self.ignore_manager: IgnoreManager = IgnoreManager(self.base_dir)
         self._load_state()
 
-    def add_ignore_pattern(self, pattern: str) -> Tuple[int, int]:
+    def add_ignore_pattern(self, pattern: Pattern) -> Tuple[int, int]:
         """
         Add a new pattern to .ignore file and update current context.
 
@@ -36,8 +54,8 @@ class ContextManager:
         self.ignore_manager.add_pattern(pattern)
 
         # Track both files and directories affected
-        files_to_remove = set()
-        cleaned_dirs = set()
+        files_to_remove: Set[FilePath] = set()
+        cleaned_dirs: Set[FilePath] = set()
 
         # First pass: identify files to remove
         for filepath in self.files:
@@ -52,7 +70,7 @@ class ContextManager:
 
         # Optionally rescan directories that had ignored files
         for dir_path in cleaned_dirs:
-            p = Path(dir_path)
+            p: Path = Path(dir_path)
             if p.exists() and p.is_dir():
                 # Check remaining files in this directory
                 for file_path in p.rglob("*"):
@@ -65,7 +83,7 @@ class ContextManager:
         self._save_state()
         return len(files_to_remove), len(cleaned_dirs)
 
-    def remove_ignore_pattern(self, pattern: str) -> bool:
+    def remove_ignore_pattern(self, pattern: Pattern) -> bool:
         """
         Remove a pattern from .ignore file.
 
@@ -77,8 +95,13 @@ class ContextManager:
         """
         return self.ignore_manager.remove_pattern(pattern)
 
-    def list_ignore_patterns(self) -> List[str]:
-        """Get list of current ignore patterns."""
+    def list_ignore_patterns(self) -> List[Pattern]:
+        """
+        Get list of current ignore patterns.
+
+        Returns:
+            List[Pattern]: List of glob-style ignore patterns
+        """
         return self.ignore_manager.list_patterns()
 
     def sync_gitignore(self) -> Tuple[int, List[str]]:
@@ -94,13 +117,12 @@ class ContextManager:
 
         # Read .gitignore patterns
         with open(gitignore_path, "r", encoding="utf-8") as f:
-            gitignore_patterns = {
-                line.strip() for line in f
-                if line.strip() and not line.startswith("#")
+            gitignore_patterns: Set[Pattern] = {
+                line.strip() for line in f if line.strip() and not line.startswith("#")
             }
 
         # Find new patterns
-        new_patterns = gitignore_patterns - self.ignore_manager.patterns
+        new_patterns: Set[Pattern] = gitignore_patterns - self.ignore_manager.patterns
 
         # Add new patterns
         for pattern in new_patterns:
@@ -115,6 +137,7 @@ class ContextManager:
         Returns:
             Tuple[bool, bool]: (Created .contextr, Updated .gitignore)
         """
+        # TODO: Consider returning a dataclass instead of tuple for clarity
         created_dir = False
         updated_gitignore = False
 
@@ -138,34 +161,33 @@ class ContextManager:
         return created_dir, updated_gitignore
 
     def _load_state(self) -> None:
-        """Load state (files and watched patterns) from a JSON file if it exists."""
-        if self.state_file.exists():
-            try:
-                with open(self.state_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
+        """Load state (files and watched patterns) from storage."""
+        try:
+            data = self.storage.load("state")
+            if data:
+                # Validate and load files
                 self.files = set(
                     make_absolute(p, self.base_dir) for p in data.get("files", [])
                 )
+                # Validate and load watched patterns
                 self.watched_patterns = set(data.get("watched_patterns", []))
-            except Exception as e:
-                console.print(f"[red]Error loading state: {e}[/red]")
+        except IOError as e:
+            console.print(f"[red]Error loading state: {e}[/red]")
 
     def _save_state(self) -> None:
-        """Save current state (files and watched patterns) to a JSON file."""
-        self.state_dir.mkdir(parents=True, exist_ok=True)
+        """Save current state (files and watched patterns) to storage."""
         try:
-            with open(self.state_file, "w", encoding="utf-8") as f:
-                data = {
-                    "files": [
-                        make_relative(p, self.base_dir) for p in sorted(self.files)
-                    ],
-                    "watched_patterns": sorted(self.watched_patterns)  # Save watched patterns
-                }
-                json.dump(data, f, indent=4)
-        except Exception as e:
+            data = {
+                "files": [make_relative(p, self.base_dir) for p in sorted(self.files)],
+                "watched_patterns": sorted(
+                    self.watched_patterns
+                ),  # Save watched patterns
+            }
+            self.storage.save("state", data)
+        except IOError as e:
             console.print(f"[red]Error saving state: {e}[/red]")
 
-    def add_files(self, patterns: List[str]) -> int:
+    def add_files(self, patterns: List[Pattern]) -> int:
         """Add files, respecting ignore patterns."""
         abs_paths = normalize_paths(patterns, self.base_dir, self.ignore_manager)
         if not abs_paths:
@@ -191,7 +213,7 @@ class ContextManager:
         self._save_state()
         return new_files_count
 
-    def remove_files(self, patterns: List[str]) -> int:
+    def remove_files(self, patterns: List[Pattern]) -> int:
         """
         Remove files or directories from the context.
         If a directory is removed, all files under it are also removed.
@@ -206,7 +228,7 @@ class ContextManager:
         if not abs_paths:
             return 0
 
-        files_to_remove = set()
+        files_to_remove: Set[FilePath] = set()
         for path_str in abs_paths:
             p = Path(path_str)
             if p.is_file():
@@ -225,11 +247,17 @@ class ContextManager:
         return removed_count
 
     def clear_context(self) -> None:
-        """Clear all files from context."""
+        """
+        Clear all files from context.
+
+        Side Effects:
+            - Removes all files from current context
+            - Saves empty state to disk
+        """
         self.files.clear()
         self._save_state()
 
-    def search_files(self, keyword: str) -> List[str]:
+    def search_files(self, keyword: str) -> List[FilePath]:
         """
         Search for files in the context containing the given keyword in their path.
 
@@ -245,7 +273,7 @@ class ContextManager:
             if keyword.lower() in f.lower()
         ]
 
-    def get_file_paths(self, relative: bool = True) -> List[str]:
+    def get_file_paths(self, relative: bool = True) -> List[FilePath]:
         """
         Get all file paths in the context.
 
@@ -259,7 +287,7 @@ class ContextManager:
             return [make_relative(f, self.base_dir) for f in sorted(self.files)]
         return sorted(self.files)
 
-    def unwatch_paths(self, patterns: List[str]) -> Tuple[int, int]:
+    def unwatch_paths(self, patterns: List[Pattern]) -> Tuple[int, int]:
         """
         Remove paths from watch list but keep existing files.
 
@@ -269,14 +297,16 @@ class ContextManager:
         Returns:
             Tuple[int, int]: (Number of patterns removed, Number of files kept)
         """
-        removed_patterns = set()
-        affected_files = set()
+        removed_patterns: Set[Pattern] = set()
+        affected_files: Set[FilePath] = set()
 
         for pattern in patterns:
             if pattern in self.watched_patterns:
                 removed_patterns.add(pattern)
                 # Count files that were added by this pattern
-                abs_paths = normalize_paths([pattern], self.base_dir, self.ignore_manager)
+                abs_paths = normalize_paths(
+                    [pattern], self.base_dir, self.ignore_manager
+                )
                 for path in abs_paths:
                     if path in self.files:
                         affected_files.add(path)
@@ -286,7 +316,7 @@ class ContextManager:
 
         return len(removed_patterns), len(affected_files)
 
-    def watch_paths(self, patterns: List[str]) -> Tuple[int, int]:
+    def watch_paths(self, patterns: List[Pattern]) -> Tuple[int, int]:
         """
         Add paths to watch list and perform initial file addition.
         Filters out ignored patterns before adding to watch list.
@@ -298,7 +328,7 @@ class ContextManager:
             Tuple[int, int]: (Number of new patterns, Number of files added)
         """
         # Filter out patterns that would be entirely ignored
-        valid_patterns = []
+        valid_patterns: List[Pattern] = []
         for pattern in patterns:
             # Normalize the pattern path
             abs_pattern = make_absolute(pattern, self.base_dir)
@@ -307,7 +337,7 @@ class ContextManager:
                 valid_patterns.append(pattern)
 
         # Only add non-ignored patterns to watch list
-        new_patterns = set(valid_patterns) - self.watched_patterns
+        new_patterns: Set[Pattern] = set(valid_patterns) - self.watched_patterns
         self.watched_patterns.update(new_patterns)
 
         # Do initial file addition (ignore patterns are respected in add_files)
@@ -316,8 +346,7 @@ class ContextManager:
         self._save_state()
         return len(new_patterns), added_count
 
-
-    def refresh_watched(self) -> Dict[str, int]:
+    def refresh_watched(self) -> FileStats:
         """
         Refresh all watched paths to detect changes.
         Only includes non-ignored files in the refresh.
@@ -325,15 +354,18 @@ class ContextManager:
         Returns:
             Dict[str, int]: Statistics about changes (added, removed files)
         """
-        stats = {"added": 0, "removed": 0}
-        old_files = self.files.copy()
+        stats: FileStats = {"added": 0, "removed": 0}
+        old_files: Set[FilePath] = self.files.copy()
 
         # Clear files that came from watched patterns
         self.files.clear()
 
         # Re-add all files from watched patterns, respecting ignore patterns
-        valid_patterns = [p for p in self.watched_patterns
-                          if not self.ignore_manager.should_ignore(make_absolute(p, self.base_dir))]
+        valid_patterns: List[Pattern] = [
+            p
+            for p in self.watched_patterns
+            if not self.ignore_manager.should_ignore(make_absolute(p, self.base_dir))
+        ]
 
         for pattern in valid_patterns:
             added = self.add_files([pattern])
@@ -344,13 +376,18 @@ class ContextManager:
 
         return stats
 
-
-    def list_watched(self) -> List[str]:
+    def list_watched(self) -> List[Pattern]:
         """
         Get list of currently watched patterns, excluding those that would be ignored.
+
+        Returns:
+            List[Pattern]: Sorted list of valid watched patterns
         """
-        return sorted(p for p in self.watched_patterns
-                      if not self.ignore_manager.should_ignore(make_absolute(p, self.base_dir)))
+        return sorted(
+            p
+            for p in self.watched_patterns
+            if not self.ignore_manager.should_ignore(make_absolute(p, self.base_dir))
+        )
 
     def save_state_as(self, state_name: str) -> bool:
         """
@@ -362,27 +399,24 @@ class ContextManager:
         Returns:
             bool: True if save was successful
         """
-        states_dir = self.state_dir / "states"
-        states_dir.mkdir(parents=True, exist_ok=True)
-
         # Ensure state name is valid
         state_name = state_name.replace(" ", "_")
-        if not state_name.endswith(".json"):
-            state_name += ".json"
+        # Remove .json extension if present for key
+        if state_name.endswith(".json"):
+            state_name = state_name[:-5]
 
-        state_path = states_dir / state_name
+        key = f"states/{state_name}"
 
         try:
-            with open(state_path, "w", encoding="utf-8") as f:
-                data = {
-                    "files": [make_relative(p, self.base_dir) for p in sorted(self.files)],
-                    "watched_patterns": sorted(self.watched_patterns),
-                    "ignore_patterns": sorted(self.ignore_manager.patterns),
-                    "negation_patterns": sorted(self.ignore_manager.negation_patterns)
-                }
-                json.dump(data, f, indent=4)
+            data = {
+                "files": [make_relative(p, self.base_dir) for p in sorted(self.files)],
+                "watched_patterns": sorted(self.watched_patterns),
+                "ignore_patterns": sorted(self.ignore_manager.patterns),
+                "negation_patterns": sorted(self.ignore_manager.negation_patterns),
+            }
+            self.storage.save(key, data)
             return True
-        except Exception as e:
+        except IOError as e:
             console.print(f"[red]Error saving state '{state_name}': {e}[/red]")
             return False
 
@@ -396,36 +430,36 @@ class ContextManager:
         Returns:
             bool: True if load was successful
         """
-        states_dir = self.state_dir / "states"
+        # Remove .json extension if present for key
+        if state_name.endswith(".json"):
+            state_name = state_name[:-5]
 
-        # Ensure state name has .json extension
-        if not state_name.endswith(".json"):
-            state_name += ".json"
-
-        state_path = states_dir / state_name
-
-        if not state_path.exists():
-            console.print(f"[red]State file not found: {state_name}[/red]")
-            return False
+        key = f"states/{state_name}"
 
         try:
-            with open(state_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            data = self.storage.load(key)
+            if not data:
+                console.print(f"[red]State file not found: {state_name}[/red]")
+                return False
 
-            # Load files
-            self.files = set(make_absolute(p, self.base_dir) for p in data.get("files", []))
+            # Load files with validation
+            self.files = set(
+                make_absolute(p, self.base_dir) for p in data.get("files", [])
+            )
 
-            # Load watched patterns
+            # Load watched patterns with validation
             self.watched_patterns = set(data.get("watched_patterns", []))
 
-            # Load ignore patterns
+            # Load ignore patterns with validation
             self.ignore_manager.patterns = set(data.get("ignore_patterns", []))
-            self.ignore_manager.negation_patterns = set(data.get("negation_patterns", []))
+            self.ignore_manager.negation_patterns = set(
+                data.get("negation_patterns", [])
+            )
             self.ignore_manager.save_patterns()  # Update the .ignore file
 
             self._save_state()  # Save as current state
             return True
-        except Exception as e:
+        except IOError as e:
             console.print(f"[red]Error loading state '{state_name}': {e}[/red]")
             return False
 
@@ -436,11 +470,9 @@ class ContextManager:
         Returns:
             List[str]: Names of saved states
         """
-        states_dir = self.state_dir / "states"
-        if not states_dir.exists():
-            return []
-
-        return [f.stem for f in states_dir.glob("*.json")]
+        # Get all keys with states/ prefix and remove the prefix
+        states = self.storage.list_keys("states/")
+        return [state.replace("states/", "") for state in states]
 
     def delete_state(self, state_name: str) -> bool:
         """
@@ -452,21 +484,17 @@ class ContextManager:
         Returns:
             bool: True if deletion was successful
         """
-        states_dir = self.state_dir / "states"
+        # Remove .json extension if present for key
+        if state_name.endswith(".json"):
+            state_name = state_name[:-5]
 
-        # Ensure state name has .json extension
-        if not state_name.endswith(".json"):
-            state_name += ".json"
-
-        state_path = states_dir / state_name
-
-        if not state_path.exists():
-            console.print(f"[red]State file not found: {state_name}[/red]")
-            return False
+        key = f"states/{state_name}"
 
         try:
-            state_path.unlink()
-            return True
-        except Exception as e:
+            if not self.storage.exists(key):
+                console.print(f"[red]State file not found: {state_name}[/red]")
+                return False
+            return self.storage.delete(key)
+        except IOError as e:
             console.print(f"[red]Error deleting state '{state_name}': {e}[/red]")
             return False

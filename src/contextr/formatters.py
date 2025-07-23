@@ -1,10 +1,10 @@
 import os
-from pathlib import Path
-from typing import Set, Dict, List
 import re
-from rich.tree import Tree
+from pathlib import Path
+from typing import Dict, List, Set
+
 from rich.console import Console
-from rich.syntax import Syntax
+from rich.tree import Tree
 
 
 def get_file_tree(files: Set[str], base_dir: Path) -> Tree:
@@ -35,14 +35,14 @@ def get_file_tree(files: Set[str], base_dir: Path) -> Tree:
             )
 
     # Build a nested tree
-    for dir_path, files in sorted(dir_groups.items()):
+    for dir_path, file_list in sorted(dir_groups.items()):
         current_node = tree
         if dir_path != ".":
             for part in Path(dir_path).parts:
                 found = False
                 for node in current_node.children:
                     # Remove the "📁 " from node label for matching
-                    label_stripped = node.label.replace("📁 ", "")
+                    label_stripped = str(node.label).replace("📁 ", "")
                     if label_stripped == part:
                         current_node = node
                         found = True
@@ -50,7 +50,7 @@ def get_file_tree(files: Set[str], base_dir: Path) -> Tree:
                 if not found:
                     current_node = current_node.add(f"📁 {part}")
 
-        for f in sorted(files):
+        for f in sorted(file_list):
             current_node.add(f"📄 {f}")
 
     return tree
@@ -59,50 +59,50 @@ def get_file_tree(files: Set[str], base_dir: Path) -> Tree:
 def detect_language(file_path: str) -> str:
     """
     Detect programming language from file extension.
-    
+
     Args:
         file_path: Path to the file
-        
+
     Returns:
         str: Language name for syntax highlighting
     """
     ext = os.path.splitext(file_path)[1].lower()
-    
+
     # Map of file extensions to language names
     lang_map = {
-        '.py': 'python',
-        '.js': 'javascript',
-        '.ts': 'typescript',
-        '.jsx': 'jsx',
-        '.tsx': 'tsx',
-        '.html': 'html',
-        '.css': 'css',
-        '.json': 'json',
-        '.md': 'markdown',
-        '.sql': 'sql',
-        '.c': 'c',
-        '.cpp': 'cpp',
-        '.h': 'c',
-        '.hpp': 'cpp',
-        '.rs': 'rust',
-        '.go': 'go',
-        '.java': 'java',
-        '.rb': 'ruby',
-        '.php': 'php',
-        '.sh': 'bash',
-        '.yaml': 'yaml',
-        '.yml': 'yaml',
-        '.toml': 'toml',
+        ".py": "python",
+        ".js": "javascript",
+        ".ts": "typescript",
+        ".jsx": "jsx",
+        ".tsx": "tsx",
+        ".html": "html",
+        ".css": "css",
+        ".json": "json",
+        ".md": "markdown",
+        ".sql": "sql",
+        ".c": "c",
+        ".cpp": "cpp",
+        ".h": "c",
+        ".hpp": "cpp",
+        ".rs": "rust",
+        ".go": "go",
+        ".java": "java",
+        ".rb": "ruby",
+        ".php": "php",
+        ".sh": "bash",
+        ".yaml": "yaml",
+        ".yml": "yaml",
+        ".toml": "toml",
     }
-    
-    return lang_map.get(ext, 'text')
+
+    return lang_map.get(ext, "text")
 
 
 def format_export_content(
-        files: Set[str],
-        base_dir: Path,
-        relative: bool = True,
-        include_contents: bool = True
+    files: Set[str],
+    base_dir: Path,
+    relative: bool = True,
+    include_contents: bool = True,
 ) -> str:
     """
     Format context information for export.
@@ -125,7 +125,7 @@ def format_export_content(
     # Format header with project info
     repo_name = base_dir.name
     total_files = len(files)
-    
+
     output_parts = [
         f"# Project Context: {repo_name}",
         f"Files selected: {total_files}",
@@ -134,13 +134,13 @@ def format_export_content(
         "```",
         tree_text.strip(),
         "```",
-        ""
+        "",
     ]
 
     # Add file contents if requested
     if include_contents:
         output_parts.append("## File Contents")
-        
+
         for fpath in sorted(files):
             if relative:
                 try:
@@ -152,7 +152,7 @@ def format_export_content(
 
             # Detect language for syntax highlighting
             lang = detect_language(path_str)
-            
+
             # Add file header with language
             output_parts.append(f"\n### {path_str}")
             output_parts.append(f"```{lang}")
@@ -161,9 +161,9 @@ def format_export_content(
             try:
                 with open(fpath, "r", encoding="utf-8") as f:
                     content = f.read()
-                    # Remove any potential backtick confusion by escaping triple backticks
+                    # Remove potential backtick confusion by escaping them
                     # This ensures code blocks terminate properly in markdown
-                    content = re.sub(r'```', '\\`\\`\\`', content)
+                    content = re.sub(r"```", "\\`\\`\\`", content)
                     output_parts.append(content)
             except Exception as e:
                 output_parts.append(f"[ERROR: Unable to read file: {e}]")

@@ -14,6 +14,15 @@ dependencies = [
     "typer>=0.15.1",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.8.6",
+    "pyright>=1.1.389",
+    "pytest>=8.3.4",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.14.0",
+]
+
 [project.scripts]
 contextr = "contextr.cli:main"
 ctxr = "contextr.cli:main"     # Shorter alias
@@ -33,3 +42,27 @@ target-version = ["py312"]
 [tool.isort]
 profile = "black"
 multi_line_output = 3
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I"]
+ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["contextr"]
+
+[tool.pyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"
+include = ["src/contextr"]
+exclude = ["**/__pycache__", "build", "dist", ".venv", "venv", "*.egg-info"]
+reportMissingImports = true
+reportMissingTypeStubs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+addopts = "--cov=src/contextr --cov-report=html --cov-report=term"

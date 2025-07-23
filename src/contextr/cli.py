@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-import typer
+from typing import List
+
 import pyperclip
+import typer
 from rich.console import Console
 from rich.table import Table
-from typing import List, Optional
 
+from .formatters import format_export_content, get_file_tree
 from .manager import ContextManager
-from .formatters import get_file_tree, format_export_content
 
 app = typer.Typer(help="ctxr - Share your codebase with Large Language Models")
 console = Console()
@@ -16,25 +17,32 @@ VERSION = "1.0.0"
 # Global context manager instance
 context_manager = ContextManager()
 
+
 @app.command()
-def watch(patterns: List[str] = typer.Argument(..., help="File patterns to watch (supports glob)")):
+def watch(
+    patterns: List[str] = typer.Argument(
+        ..., help="File patterns to watch (supports glob)"
+    ),
+) -> None:
     """
     Add files to context and monitor them for changes.
-    
+
     Example: ctxr watch "src/**/*.py" "*.md"
     """
     new_patterns, added_files = context_manager.watch_paths(patterns)
 
     if new_patterns > 0:
         console.print(
-            f"[green]Added [bold]{new_patterns}[/bold] new pattern(s) to watch list.[/green]"
+            f"[green]Added [bold]{new_patterns}[/bold] new pattern(s) to "
+            "watch list.[/green]"
         )
     else:
         console.print("[yellow]All patterns were already being watched.[/yellow]")
 
     if added_files > 0:
         console.print(
-            f"[green]Initially added [bold]{added_files}[/bold] files to context.[/green]"
+            f"[green]Initially added [bold]{added_files}[/bold] files to "
+            "context.[/green]"
         )
 
     console.print(get_file_tree(context_manager.files, context_manager.base_dir))
@@ -42,31 +50,35 @@ def watch(patterns: List[str] = typer.Argument(..., help="File patterns to watch
 
 @app.command()
 def ignore(
-        pattern: str = typer.Argument(..., help="Pattern to add to .ignore file")
-):
+    pattern: str = typer.Argument(..., help="Pattern to add to .ignore file"),
+) -> None:
     """
     Add a pattern to ignore list.
-    
+
     Example: ctxr ignore "**/*.log"
     """
     removed_files, cleaned_dirs = context_manager.add_ignore_pattern(pattern)
     console.print(f"[green]Added pattern to .ignore: {pattern}[/green]")
 
     if removed_files:
-        console.print(f"[yellow]Removed {removed_files} existing files matching pattern[/yellow]")
+        console.print(
+            f"[yellow]Removed {removed_files} existing files matching pattern[/yellow]"
+        )
 
     if cleaned_dirs:
-        console.print(f"[blue]Rescanned {cleaned_dirs} directories for new valid files[/blue]")
+        console.print(
+            f"[blue]Rescanned {cleaned_dirs} directories for new valid files[/blue]"
+        )
 
     # Show the updated context
     console.print(get_file_tree(context_manager.files, context_manager.base_dir))
 
 
 @app.command(name="ignore-list")
-def ignore_list():
+def ignore_list() -> None:
     """
     List all ignored patterns.
-    
+
     Example: ctxr ignore-list
     """
     patterns = context_manager.list_ignore_patterns()
@@ -80,10 +92,10 @@ def ignore_list():
 
 
 @app.command(name="sync")
-def sync():
+def sync() -> None:
     """
     Sync context from watched patterns and export to clipboard.
-    
+
     Example: ctxr sync
     """
     # First refresh the context
@@ -96,7 +108,8 @@ def sync():
             )
         if stats["removed"] > 0:
             console.print(
-                f"[yellow]Removed [bold]{stats['removed']}[/bold] files that no longer exist.[/yellow]"
+                f"[yellow]Removed [bold]{stats['removed']}[/bold] files that no "
+                "longer exist.[/yellow]"
             )
     else:
         console.print("[blue]No changes detected in watched paths.[/blue]")
@@ -111,7 +124,7 @@ def sync():
         context_manager.files,
         context_manager.base_dir,
         relative=True,
-        include_contents=True
+        include_contents=True,
     )
 
     # Copy to clipboard
@@ -123,20 +136,20 @@ def sync():
 
 
 @app.command(name="list")
-def list_command():
+def list_command() -> None:
     """
     List all files in the current context.
-    
+
     Example: ctxr list
     """
     console.print(get_file_tree(context_manager.files, context_manager.base_dir))
 
 
 @app.command(name="watch-list")
-def watch_list():
+def watch_list() -> None:
     """
     List all patterns currently being watched.
-    
+
     Example: ctxr watch-list
     """
     patterns = context_manager.list_watched()
@@ -150,17 +163,20 @@ def watch_list():
 
 
 @app.command(name="unwatch")
-def unwatch(patterns: List[str] = typer.Argument(..., help="File patterns to stop watching")):
+def unwatch(
+    patterns: List[str] = typer.Argument(..., help="File patterns to stop watching"),
+) -> None:
     """
     Remove patterns from watch list.
-    
+
     Example: ctxr unwatch "src/tests/**"
     """
     removed_patterns, kept_files = context_manager.unwatch_paths(patterns)
 
     if removed_patterns > 0:
         console.print(
-            f"[green]Removed [bold]{removed_patterns}[/bold] pattern(s) from watch list.[/green]"
+            f"[green]Removed [bold]{removed_patterns}[/bold] pattern(s) from "
+            "watch list.[/green]"
         )
         console.print(
             f"[blue]Keeping [bold]{kept_files}[/bold] existing files in context.[/blue]"
@@ -171,11 +187,11 @@ def unwatch(patterns: List[str] = typer.Argument(..., help="File patterns to sto
 
 @app.command(name="unignore")
 def unignore(
-        pattern: str = typer.Argument(..., help="Pattern to remove from ignore list")
-):
+    pattern: str = typer.Argument(..., help="Pattern to remove from ignore list"),
+) -> None:
     """
     Remove a pattern from ignore list.
-    
+
     Example: ctxr unignore "**/*.log"
     """
     if context_manager.remove_ignore_pattern(pattern):
@@ -185,10 +201,10 @@ def unignore(
 
 
 @app.command(name="gitignore-sync")
-def gitignore_sync():
+def gitignore_sync() -> None:
     """
     Sync patterns from .gitignore to ignore list.
-    
+
     Example: ctxr gitignore-sync
     """
     if not (context_manager.base_dir / ".gitignore").exists():
@@ -198,7 +214,9 @@ def gitignore_sync():
     added_count, new_patterns = context_manager.sync_gitignore()
 
     if added_count > 0:
-        console.print(f"[green]Added {added_count} new patterns from .gitignore:[/green]")
+        console.print(
+            f"[green]Added {added_count} new patterns from .gitignore:[/green]"
+        )
         table = Table("New Patterns", style="bold green")
         for pattern in new_patterns:
             table.add_row(pattern)
@@ -208,10 +226,10 @@ def gitignore_sync():
 
 
 @app.command()
-def init():
+def init() -> None:
     """
     Initialize ctxr in the current directory.
-    
+
     Example: ctxr init
     """
     created_dir, updated_gitignore = context_manager.initialize()
@@ -230,17 +248,17 @@ def init():
 
     console.print("\n[bold green]ctxr is ready to use![/bold green]")
     console.print("\nQuick start:")
-    console.print("  1. Add files to watch: [bold]ctxr watch \"src/**/*.py\"[/bold]")
+    console.print('  1. Add files to watch: [bold]ctxr watch "src/**/*.py"[/bold]')
     console.print("  2. Sync to clipboard:  [bold]ctxr sync[/bold]")
 
 
 @app.command()
-def version():
+def version() -> None:
     """Print version information."""
     console.print(f"[bold green]ctxr v{VERSION}[/bold green]")
 
 
-def main():
+def main() -> None:
     """Entrypoint for the CLI."""
     app()
 
