@@ -30,16 +30,22 @@ def make_relative(path: str, base_dir: Path) -> str:
 
         # Handle case-insensitive file systems on Windows/macOS
         if platform.system() in ("Windows", "Darwin"):
-            if str(path_obj).lower().startswith(str(base_dir_resolved).lower()):
-                # Handle case-insensitive filesystem behavior
-                # we need to handle this special case
-                rel_path = str(path_obj)[len(str(base_dir_resolved)) :]
+            path_str = str(path_obj)
+            base_str = str(base_dir_resolved)
+
+            # Compare paths case-insensitively
+            if path_str.lower().startswith(base_str.lower()):
+                # Calculate relative path preserving original case
+                rel_path = path_str[len(base_str):]
                 if rel_path.startswith(os.sep):
                     rel_path = rel_path[1:]
-                return rel_path
+                # Return with OS-specific separators
+                return rel_path if rel_path else "."
 
         # Standard approach for case-sensitive filesystems
-        return str(path_obj.relative_to(base_dir_resolved))
+        rel_path = path_obj.relative_to(base_dir_resolved)
+        # Convert to string to get OS-specific separators
+        return str(rel_path)
     except ValueError:
         # If we can't make it relative, return the absolute path
         return str(Path(path).resolve())

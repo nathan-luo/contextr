@@ -179,19 +179,18 @@ class TestJsonStorage:
         parsed = json.loads(content)
         assert list(parsed.keys()) == sorted(parsed.keys())  # Keys are sorted
 
-    def test_error_handling_save(self, temp_dir: Path) -> None:
+    def test_error_handling_save(self, temp_dir: Path, monkeypatch) -> None:
         """Test error handling when save fails."""
         storage = JsonStorage(temp_dir)
 
-        # Make directory read-only to cause save failure
-        temp_dir.chmod(0o444)
+        # Mock the file write operation to raise an error
+        def mock_open(*args, **kwargs):
+            raise OSError("Permission denied")
 
-        try:
-            with pytest.raises(IOError, match="Failed to save data"):
-                storage.save("test", {"data": "value"})
-        finally:
-            # Restore permissions for cleanup
-            temp_dir.chmod(0o755)
+        monkeypatch.setattr("builtins.open", mock_open)
+
+        with pytest.raises(IOError, match="Failed to save data"):
+            storage.save("test", {"data": "value"})
 
     def test_error_handling_load_corrupt_json(
         self, storage: JsonStorage, temp_dir: Path
