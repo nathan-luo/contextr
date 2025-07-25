@@ -8,9 +8,10 @@
 - Lint code: `uv run ruff check .`
 - Auto-fix linting issues: `uv run ruff check . --fix`
 - Type check: `uv run pyright` (runs strict type checking)
-- Run tests: `uv run pytest` (runs all tests with coverage)
+- Run tests: `uv run pytest` (runs all tests with coverage - currently 89 tests, 62% coverage)
 - Run specific test: `uv run pytest tests/unit/test_file.py`
 - Run tests with verbose output: `uv run pytest -v`
+- Check coverage: `uv run pytest --cov=contextr --cov-report=term-missing`
 
 ## Code Style Guidelines
 - **Formatting**: Enforced by Ruff with 88 character line length (matching Black)
@@ -23,8 +24,10 @@
 - **Type Checking**: Pyright configured in strict mode - all functions must have type annotations
 
 ## Project Structure
-- CLI commands defined in `cli.py`
-- Core functionality in `manager.py`
+- CLI commands defined in `cli.py` (including profile management commands)
+- Core functionality in `manager.py` (with storage abstraction)
+- Profile management in `profile.py` (ProfileManager and Profile classes)
+- Storage abstraction in `storage/` directory (base.py, json_storage.py)
 - Output formatting in `formatters.py`
 - Helper utilities in `utils/` directory
 - Tests in `tests/` directory (unit, integration, fixtures)
@@ -32,7 +35,7 @@
 ## Testing Guidelines
 - **Framework**: pytest with coverage reporting
 - **Structure**: Tests organized in unit/, integration/, and fixtures/ directories
-- **Coverage Goal**: Aim for 80% code coverage
+- **Coverage Goal**: Aim for 80% code coverage (currently at 62%)
 - **Test Naming**: Use descriptive test names that explain what is being tested
 - **Test Organization**: Group related tests in classes
 - **Fixtures**: Shared fixtures in conftest.py

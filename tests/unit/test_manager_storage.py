@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from contextr.manager import ContextManager
+from contextr.profile import Profile
 from contextr.storage import StorageBackend
 
 
@@ -219,3 +220,120 @@ class TestContextManagerStorage:
         assert isinstance(saved_state["watched_patterns"], list)
         assert all(isinstance(f, str) for f in saved_state["files"])
         assert all(isinstance(p, str) for p in saved_state["watched_patterns"])
+
+    def test_clear_method(
+        self, manager_with_mock_storage: ContextManager, mock_storage: MockStorage
+    ) -> None:
+        """Test clear method clears all context data."""
+        manager = manager_with_mock_storage
+
+        # Set up initial state
+        manager.files = {"/test/file1.py", "/test/file2.py"}
+        manager.watched_patterns = {"*.py", "src/**/*.js"}
+        manager.ignore_manager.patterns = {"*.pyc", "__pycache__"}
+        manager.ignore_manager.negation_patterns = {"!important.pyc"}
+
+        # Clear context
+        manager.clear()
+
+        # Verify everything is cleared
+        assert len(manager.files) == 0
+        assert len(manager.watched_patterns) == 0
+        assert len(manager.ignore_manager.patterns) == 0
+        assert len(manager.ignore_manager.negation_patterns) == 0
+
+        # Verify state was saved
+        assert mock_storage.save_called > 0
+        saved_state = mock_storage.data["state"]
+        assert saved_state["files"] == []
+        assert saved_state["watched_patterns"] == []
+
+    def test_apply_profile(
+        self, manager_with_mock_storage: ContextManager, mock_storage: MockStorage
+    ) -> None:
+        """Test apply_profile replaces current context with profile data."""
+        manager = manager_with_mock_storage
+
+        # Set up initial state with different patterns
+        manager.files = {"/old/file1.py", "/old/file2.py"}
+        manager.watched_patterns = {"old/*.py"}
+        manager.ignore_manager.patterns = {"*.old"}
+
+        # Create a profile to apply
+        profile = Profile(
+            name="test-profile",
+            watched_patterns=["src/**/*.py", "tests/**/*.py"],
+            ignore_patterns=["*.pyc", "__pycache__", ".pytest_cache"],
+        )
+
+        # Apply the profile
+        manager.apply_profile(profile)
+
+        # Verify context was cleared and profile patterns applied
+        assert manager.watched_patterns == {"src/**/*.py", "tests/**/*.py"}
+        assert manager.ignore_manager.patterns == {
+            "*.pyc", "__pycache__", ".pytest_cache"
+        }
+
+        # Files should be cleared initially by clear() but may be
+        # repopulated by refresh_files. The actual file population
+        # depends on the filesystem, so we just verify the patterns
+
+    def test_refresh_files(
+        self, manager_with_mock_storage: ContextManager, mock_storage: MockStorage
+    ) -> None:
+        """Test refresh_files method re-adds files from watched patterns."""
+        manager = manager_with_mock_storage
+
+        # Use a temporary directory for test files
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_path = Path(tmpdir)
+
+            # Create test files
+            test_files = [
+                temp_path / "test1.py",
+                temp_path / "test2.py",
+                temp_path / "test.txt",
+            ]
+            for f in test_files:
+                f.touch()
+
+            # Update manager's base_dir to temp directory
+            manager.base_dir = temp_path
+
+            # Set watched patterns
+            manager.watched_patterns = {"*.py"}
+
+            # Refresh files
+            added = manager.refresh_files()
+
+            # Should have added the .py files
+            assert added == 2
+            assert len(manager.files) == 2
+
+    def test_apply_profile_idempotent(
+        self, manager_with_mock_storage: ContextManager, mock_storage: MockStorage
+    ) -> None:
+        """Test that applying the same profile multiple times is idempotent."""
+        manager = manager_with_mock_storage
+
+        # Create a profile
+        profile = Profile(
+            name="idempotent-test",
+            watched_patterns=["*.md", "docs/**/*.md"],
+            ignore_patterns=["*.tmp"],
+        )
+
+        # Apply profile first time
+        manager.apply_profile(profile)
+        first_patterns = manager.watched_patterns.copy()
+        first_ignore = manager.ignore_manager.patterns.copy()
+
+        # Apply profile second time
+        manager.apply_profile(profile)
+        second_patterns = manager.watched_patterns
+        second_ignore = manager.ignore_manager.patterns
+
+        # Should be identical
+        assert first_patterns == second_patterns
+        assert first_ignore == second_ignore

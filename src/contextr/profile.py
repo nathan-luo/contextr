@@ -21,6 +21,16 @@ PROFILE_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 console = Console()
 
 
+class ProfileError(Exception):
+    """Base exception for profile-related errors."""
+    pass
+
+
+class ProfileNotFoundError(ProfileError):
+    """Exception raised when a profile is not found."""
+    pass
+
+
 class Profile:
     """Represents a saved context profile."""
 
@@ -174,37 +184,50 @@ class ProfileManager:
 
         return sorted(profiles, key=lambda p: p.name)
 
-    def load_profile(self, name: ProfileName) -> Optional[Profile]:
+    def load_profile(self, name: ProfileName) -> Profile:
         """Load a specific profile by name.
 
         Args:
             name: Name of the profile to load
 
         Returns:
-            Optional[Profile]: The loaded profile, or None if not found
+            Profile: The loaded profile
+
+        Raises:
+            ProfileNotFoundError: If profile doesn't exist
         """
         key = f"profiles/{name}"
         data = self.storage.load(key)
 
         if not data:
-            return None
+            raise ProfileNotFoundError(
+                f"Profile '{name}' not found. "
+                "Use 'ctxr profile list' to see available profiles."
+            )
 
         try:
             return Profile.from_dict(data)
         except (KeyError, TypeError) as e:
-            console.print(f"[red]Error loading profile '{name}': {e}[/red]")
-            return None
+            raise ProfileError(f"Error loading profile '{name}': {e}") from e
 
     def delete_profile(self, name: ProfileName) -> bool:
-        """Delete a profile.
+        """Delete a profile by name.
 
         Args:
             name: Name of the profile to delete
 
         Returns:
             bool: True if deletion was successful
+
+        Raises:
+            ProfileNotFoundError: If profile doesn't exist
         """
         key = f"profiles/{name}"
+        if not self.storage.exists(key):
+            raise ProfileNotFoundError(
+                f"Profile '{name}' not found. "
+                "Use 'ctxr profile list' to see available profiles."
+            )
         return self.storage.delete(key)
 
     def _validate_profile_name(self, name: str) -> bool:

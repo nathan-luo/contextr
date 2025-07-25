@@ -10,10 +10,11 @@ Think of it as "git add" but for AI conversations - select the files you want yo
 - **🚫 Git-Style Ignores**: Full support for ignore patterns including negation with `!`
 - **📋 One-Click Export**: Sync changes and copy formatted context to clipboard instantly
 - **🎨 LLM-Optimized Output**: Markdown formatting with syntax highlighting for 40+ languages
-- **💾 State Management**: Save and load different context configurations
+- **💾 Context Profiles**: Save and instantly switch between different context configurations
 - **🔄 Auto-Sync**: Automatically detect when watched files are added or removed
 - **🌐 Cross-Platform**: Works seamlessly on Linux, macOS, and Windows
 - **🔗 Path Intelligence**: Handles symlinks, `~` expansion, and environment variables
+- **🤖 Modern Development**: Type-safe code with 62% test coverage and strict linting
 
 ## Installation
 
@@ -138,19 +139,22 @@ ctxr ignore "**/*.test.py"    # Ignore all test files
 ctxr ignore "!important.test.py"  # But include this specific test
 ```
 
-### State Management (Coming Soon)
+### Context Profiles
 
-Save and load different context configurations:
+Save and instantly switch between different context configurations:
 
 ```bash
-# Save current state
-ctxr state save "feature-x"
+# Save current context as a profile
+ctxr profile save backend --description "Backend API development"
 
-# Load a saved state
-ctxr state load "feature-x"
+# Load a saved profile
+ctxr profile load backend
 
-# List saved states
-ctxr state list
+# List all saved profiles
+ctxr profile list
+
+# Delete a profile
+ctxr profile delete backend
 ```
 
 ## Output Format
@@ -248,9 +252,11 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Roadmap
 
-- [ ] State management (save/load named contexts)
+- [x] Context Profiles - Save and switch between different contexts
+- [ ] Profile templates for common project types
 - [ ] Interactive file selection mode
 - [ ] Custom output templates
 - [ ] Integration with popular IDEs
 - [ ] Direct LLM API integration
 - [ ] Context size optimization
+- [ ] Team profile sharing

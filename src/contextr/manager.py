@@ -3,6 +3,7 @@ from typing import Dict, List, Optional, Set, Tuple, TypeAlias
 
 from rich.console import Console
 
+from .profile import Profile
 from .storage import JsonStorage, StorageBackend
 from .utils.ignore_utils import IgnoreManager
 from .utils.path_utils import make_absolute, make_relative, normalize_paths
@@ -257,6 +258,22 @@ class ContextManager:
         self.files.clear()
         self._save_state()
 
+    def clear(self) -> None:
+        """
+        Clear all context data including files and patterns.
+
+        Side Effects:
+            - Removes all files from current context
+            - Clears watched patterns
+            - Clears ignore patterns
+            - Saves empty state to disk
+        """
+        self.files.clear()
+        self.watched_patterns.clear()
+        self.ignore_manager.patterns.clear()
+        self.ignore_manager.negation_patterns.clear()
+        self._save_state()
+
     def search_files(self, keyword: str) -> List[FilePath]:
         """
         Search for files in the context containing the given keyword in their path.
@@ -498,3 +515,38 @@ class ContextManager:
         except IOError as e:
             console.print(f"[red]Error deleting state '{state_name}': {e}[/red]")
             return False
+
+    def apply_profile(self, profile: Profile) -> None:
+        """
+        Replace current context with profile data.
+
+        Args:
+            profile: Profile object containing patterns to apply
+
+        Side Effects:
+            - Clears current context
+            - Applies profile patterns
+            - Triggers automatic file refresh
+        """
+        self.clear()
+        self.watched_patterns = set(profile.watched_patterns)
+        self.ignore_manager.patterns = set(profile.ignore_patterns)
+        self.refresh_files()
+
+    def refresh_files(self) -> int:
+        """
+        Refresh files based on current watched patterns.
+
+        Returns:
+            int: Number of files added
+        """
+        # Clear existing files
+        self.files.clear()
+
+        # Re-add all files from watched patterns
+        total_added = 0
+        for pattern in self.watched_patterns:
+            added = self.add_files([pattern])
+            total_added += added
+
+        return total_added

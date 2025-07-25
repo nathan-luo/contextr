@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from datetime import datetime
 from typing import List
 
 import pyperclip
@@ -8,7 +9,7 @@ from rich.table import Table
 
 from .formatters import format_export_content, get_file_tree
 from .manager import ContextManager
-from .profile import ProfileManager
+from .profile import ProfileManager, ProfileNotFoundError
 
 app = typer.Typer(help="ctxr - Share your codebase with Large Language Models")
 console = Console()
@@ -338,6 +339,125 @@ def profile_list() -> None:
     table = profile_manager.format_profiles_table(profiles)
     console.print(table)
     console.print(f"\n[dim]Total profiles: {len(profiles)}[/dim]")
+
+
+@profile_app.command("load")
+def profile_load(
+    name: str = typer.Argument(..., help="Name of the profile to load"),
+) -> None:
+    """
+    Load a previously saved profile to replace current context.
+
+    Example: ctxr profile load frontend
+    """
+    # Create ProfileManager instance
+    profile_manager = ProfileManager(context_manager.storage, context_manager.base_dir)
+
+    try:
+        # Load the profile
+        profile = profile_manager.load_profile(name)
+
+        # Apply the profile to the context
+        context_manager.apply_profile(profile)
+
+        # Display success message with loaded patterns summary
+        console.print(f"[green]✓ Profile '{name}' loaded successfully![/green]")
+
+        # Show profile details
+        if profile.metadata.get("description"):
+            console.print(f"  Description: {profile.metadata['description']}")
+
+        console.print(f"  Watched patterns: {len(profile.watched_patterns)}")
+        if profile.watched_patterns:
+            for pattern in sorted(profile.watched_patterns)[:3]:
+                console.print(f"    - {pattern}")
+            if len(profile.watched_patterns) > 3:
+                console.print(f"    ... and {len(profile.watched_patterns) - 3} more")
+
+        console.print(f"  Ignore patterns: {len(profile.ignore_patterns)}")
+
+        # Show the files now in context
+        file_count = len(context_manager.files)
+        console.print(f"\n[blue]Context updated with {file_count} files[/blue]")
+
+        # Show file tree if not too many files
+        if file_count > 0 and file_count <= 50:
+            console.print(
+                get_file_tree(context_manager.files, context_manager.base_dir)
+            )
+        elif file_count > 50:
+            console.print(
+                f"[dim]Use 'ctxr list' to see all {file_count} files in context[/dim]"
+            )
+
+    except ProfileNotFoundError:
+        console.print(f"[red]Profile '{name}' not found.[/red]")
+        console.print("\nUse 'ctxr profile list' to see available profiles.")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error loading profile: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@profile_app.command("delete")
+def profile_delete(
+    name: str = typer.Argument(..., help="Profile name to delete"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+) -> None:
+    """
+    Delete a saved profile.
+
+    Example: ctxr profile delete frontend
+    """
+    # Create ProfileManager instance
+    profile_manager = ProfileManager(context_manager.storage, context_manager.base_dir)
+
+    try:
+        # Load profile to show details before deletion
+        profile = profile_manager.load_profile(name)
+
+        # Show profile details before deletion prompt
+        console.print(f"Profile: [cyan]{name}[/cyan]")
+        if profile.metadata.get("description"):
+            console.print(f"Description: {profile.metadata['description']}")
+        console.print(f"Watched patterns: {len(profile.watched_patterns)}")
+        console.print(f"Ignore patterns: {len(profile.ignore_patterns)}")
+
+        # Format creation date
+        created_at = profile.metadata.get("created_at", "")
+        if created_at:
+            try:
+                dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                created_str = dt.strftime("%Y-%m-%d %H:%M")
+                console.print(f"Created: {created_str}")
+            except ValueError:
+                pass
+
+        # Confirmation prompt
+        if not force:
+            confirm = typer.confirm(f"\nDelete profile '{name}'?")
+            if not confirm:
+                console.print("[yellow]Profile deletion cancelled.[/yellow]")
+                raise typer.Abort()
+
+        # Delete the profile
+        success = profile_manager.delete_profile(name)
+
+        if success:
+            console.print(f"[green]✓ Profile '{name}' deleted successfully![/green]")
+        else:
+            console.print(f"[red]Failed to delete profile '{name}'[/red]")
+            raise typer.Exit(1)
+
+    except ProfileNotFoundError:
+        console.print(f"[red]Profile '{name}' not found.[/red]")
+        console.print("\nUse 'ctxr profile list' to see available profiles.")
+        raise typer.Exit(1)
+    except typer.Abort:
+        raise
+    except Exception as e:
+        console.print(f"[red]Error deleting profile: {e}[/red]")
+        raise typer.Exit(1)
 
 
 def main() -> None:

@@ -228,26 +228,27 @@ class JsonStorage(StorageBackend):
 
 ## Profile Architecture (Epic 2)
 
-### Proposed Design
+### Implemented Design
 ```
 ┌─────────────────┐
 │  ProfileManager │
 ├─────────────────┤
-│ + create()      │
-│ + load()        │
-│ + list()        │
-│ + delete()      │
-│ + get_active()  │
+│ + save_profile()│
+│ + load_profile()│
+│ + list_profiles()│
+│ + delete_profile()│
+│ + format_profiles_table()│
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐     ┌─────────────────┐
-│ ProfileStorage  │────▶│  ContextManager │
+│ StorageBackend  │────▶│  ContextManager │
 ├─────────────────┤     ├─────────────────┤
-│ + save()        │     │ + switch_profile│
-│ + load()        │     │ + get_profile() │
-│ + list()        │     └─────────────────┘
+│ + save()        │     │ + apply_profile()│
+│ + load()        │     │ + save_state()  │
+│ + exists()      │     └─────────────────┘
 │ + delete()      │
+│ + list_keys()   │
 └─────────────────┘
 ```
 
@@ -267,21 +268,22 @@ class JsonStorage(StorageBackend):
 
 ### Profile Commands Architecture
 ```python
-# New profile command group
-@app.command()
-def profile():
-    """Manage context profiles"""
-    pass
+# Profile command group implementation
+profile_app = typer.Typer(help="Manage context profiles")
+app.add_typer(profile_app, name="profile")
 
-@profile.command()
-def save(name: str, description: Optional[str] = None):
+@profile_app.command("save")
+def profile_save(name: str, description: str = "", force: bool = False):
     """Save current context as profile"""
-    # Implementation
+    profile_manager = ProfileManager(context_manager.storage, context_manager.base_dir)
+    # Save implementation
 
-@profile.command()
-def load(name: str):
+@profile_app.command("load")
+def profile_load(name: str):
     """Load and activate profile"""
-    # Implementation
+    profile = profile_manager.load_profile(name)
+    context_manager.apply_profile(profile)
+    # Load implementation
 ```
 
 ## Technical Decisions
@@ -339,7 +341,7 @@ tests/
 - **Integration Tests**: End-to-end workflows
 - **Mocking**: External dependencies
 - **Fixtures**: Reusable test data
-- **Coverage**: Minimum 80% target
+- **Coverage**: Minimum 80% target (currently 62%)
 
 ### Key Test Patterns
 ```python

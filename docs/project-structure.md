@@ -59,10 +59,11 @@ contextr/
 - Entry point: Creates Typer app instance
 
 #### `manager.py`
-- Core business logic for context management
+- Core business logic for context management with storage abstraction
 - Manages watched and ignored file patterns
-- Handles state persistence
+- Handles state persistence via injected storage backend
 - File discovery and filtering
+- Profile application support (apply_profile method)
 
 #### `formatters.py`
 - Formats file contents for output
@@ -151,8 +152,8 @@ ctxr --help  # Short alias
 
 ### Testing Commands
 ```bash
-# Run tests (when implemented)
-pytest
+# Run tests
+uv run pytest
 
 # Run with coverage
 pytest --cov=contextr --cov-report=html

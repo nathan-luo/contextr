@@ -7,7 +7,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from contextr.profile import Profile, ProfileManager
+from contextr.profile import Profile, ProfileError, ProfileManager, ProfileNotFoundError
 from contextr.storage import StorageBackend
 
 
@@ -282,41 +282,74 @@ class TestProfileManager:
 
         profile = profile_manager.load_profile("test")
 
-        assert profile is not None
         assert profile.name == "test"
         assert profile.watched_patterns == ["*.py"]
+        assert profile.ignore_patterns == ["*.pyc"]
+        assert profile.metadata["description"] == "Test profile"
         mock_storage.load.assert_called_once_with("profiles/test")
 
     def test_load_profile_not_found(
         self, profile_manager: ProfileManager, mock_storage: Mock
     ) -> None:
-        """Test loading a non-existent profile."""
+        """Test loading a non-existent profile raises ProfileNotFoundError."""
         mock_storage.load.return_value = None
 
-        profile = profile_manager.load_profile("nonexistent")
+        with pytest.raises(ProfileNotFoundError) as exc_info:
+            profile_manager.load_profile("nonexistent")
 
-        assert profile is None
+        assert "Profile 'nonexistent' not found" in str(exc_info.value)
+        assert "ctxr profile list" in str(exc_info.value)
 
     def test_load_profile_invalid_data(
         self, profile_manager: ProfileManager, mock_storage: Mock
     ) -> None:
-        """Test loading profile with invalid data."""
+        """Test loading profile with invalid data raises ProfileError."""
         # Missing required field
         mock_storage.load.return_value = {"watched_patterns": ["*.py"]}
 
-        profile = profile_manager.load_profile("invalid")
+        with pytest.raises(ProfileError) as exc_info:
+            profile_manager.load_profile("invalid")
 
-        assert profile is None
+        assert "Error loading profile 'invalid'" in str(exc_info.value)
 
-    def test_delete_profile(
+    def test_delete_profile_exists(
         self, profile_manager: ProfileManager, mock_storage: Mock
     ) -> None:
-        """Test deleting a profile."""
+        """Test deleting an existing profile."""
+        mock_storage.exists.return_value = True
         mock_storage.delete.return_value = True
 
         success = profile_manager.delete_profile("test")
 
         assert success is True
+        mock_storage.exists.assert_called_once_with("profiles/test")
+        mock_storage.delete.assert_called_once_with("profiles/test")
+
+    def test_delete_profile_not_found(
+        self, profile_manager: ProfileManager, mock_storage: Mock
+    ) -> None:
+        """Test deleting a non-existent profile raises ProfileNotFoundError."""
+        mock_storage.exists.return_value = False
+
+        with pytest.raises(ProfileNotFoundError) as exc_info:
+            profile_manager.delete_profile("nonexistent")
+
+        assert "Profile 'nonexistent' not found" in str(exc_info.value)
+        assert "ctxr profile list" in str(exc_info.value)
+        mock_storage.exists.assert_called_once_with("profiles/nonexistent")
+        mock_storage.delete.assert_not_called()
+
+    def test_delete_profile_storage_failure(
+        self, profile_manager: ProfileManager, mock_storage: Mock
+    ) -> None:
+        """Test delete profile returns False on storage failure."""
+        mock_storage.exists.return_value = True
+        mock_storage.delete.return_value = False
+
+        success = profile_manager.delete_profile("test")
+
+        assert success is False
+        mock_storage.exists.assert_called_once_with("profiles/test")
         mock_storage.delete.assert_called_once_with("profiles/test")
 
     def test_validate_profile_name(self, profile_manager: ProfileManager) -> None:
