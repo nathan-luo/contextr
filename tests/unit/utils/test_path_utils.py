@@ -1,5 +1,6 @@
 """Unit tests for path_utils module."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -16,7 +17,8 @@ class TestMakeRelative:
         base_dir = Path("/home/user/project")
         path = "/home/user/project/src/main.py"
         result = make_relative(path, base_dir)
-        assert result == "src/main.py"
+        expected = os.path.join("src", "main.py")
+        assert result == expected
 
     def test_already_relative_path(self) -> None:
         """Test handling a path that's already relative."""
@@ -24,7 +26,9 @@ class TestMakeRelative:
         path = "/other/location/file.py"
         result = make_relative(path, base_dir)
         # Should return absolute path when can't make relative
-        assert result == "/other/location/file.py"
+        # Handle Windows absolute paths with drive letters
+        expected = str(Path(path).resolve())
+        assert result == expected
 
     def test_path_with_symlinks(self, tmp_path: Path) -> None:
         """Test handling paths with symlinks."""
@@ -32,13 +36,18 @@ class TestMakeRelative:
         real_dir = tmp_path / "real"
         real_dir.mkdir()
         symlink_dir = tmp_path / "link"
-        symlink_dir.symlink_to(real_dir)
+        try:
+            symlink_dir.symlink_to(real_dir)
+        except OSError:
+            # Skip test if symlinks are not supported (Windows without admin)
+            pytest.skip("Symlinks not supported on this system")
 
         # Test path through symlink
         file_path = symlink_dir / "file.txt"
         result = make_relative(str(file_path), tmp_path)
-        # Should resolve to real path
-        assert result == "real/file.txt"
+        # Should resolve to real path with OS-specific separators
+        expected = os.path.join("real", "file.txt")
+        assert result == expected
 
 
 class TestMakeAbsolute:
@@ -56,7 +65,9 @@ class TestMakeAbsolute:
         base_dir = Path("/home/user/project")
         path = "/other/location/file.py"
         result = make_absolute(path, base_dir)
-        assert result == "/other/location/file.py"
+        # Handle Windows absolute paths
+        expected = str(Path(path).resolve())
+        assert result == expected
 
     def test_home_expansion(self) -> None:
         """Test tilde expansion for home directory."""
@@ -64,18 +75,25 @@ class TestMakeAbsolute:
         path = "~/documents/file.txt"
         result = make_absolute(path, base_dir)
         # Should expand to user's home directory
-        assert result.startswith(str(Path.home()))
-        assert result.endswith("documents/file.txt")
+        result_path = Path(result)
+        home_path = Path.home()
+        assert result_path.parts[: len(home_path.parts)] == home_path.parts
+        # Check the relative part matches (case-insensitive for directory name)
+        assert result_path.parts[-1] == "file.txt"
+        assert result_path.parts[-2].lower() == "documents"
 
     def test_environment_variable_expansion(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Test environment variable expansion."""
         base_dir = Path("/home/user/project")
-        monkeypatch.setenv("TEST_DIR", "/custom/path")
+        # Use a path that works on Windows
+        test_path = str(Path("/custom/path").resolve())
+        monkeypatch.setenv("TEST_DIR", test_path)
         path = "$TEST_DIR/file.txt"
         result = make_absolute(path, base_dir)
-        assert result == "/custom/path/file.txt"
+        expected = str((Path(test_path) / "file.txt").resolve())
+        assert result == expected
 
 
 class TestNormalizePaths:

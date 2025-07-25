@@ -23,11 +23,13 @@ console = Console()
 
 class ProfileError(Exception):
     """Base exception for profile-related errors."""
+
     pass
 
 
 class ProfileNotFoundError(ProfileError):
     """Exception raised when a profile is not found."""
+
     pass
 
 
@@ -287,4 +289,3 @@ class ProfileManager:
             )
 
         return table
-

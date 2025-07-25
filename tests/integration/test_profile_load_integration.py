@@ -36,8 +36,7 @@ def context_manager(temp_dir: Path) -> ContextManager:
 def profile_manager(context_manager: ContextManager) -> ProfileManager:
     """Create a ProfileManager using the same storage as ContextManager."""
     return ProfileManager(
-        storage=context_manager.storage,
-        base_dir=context_manager.base_dir
+        storage=context_manager.storage, base_dir=context_manager.base_dir
     )
 
 
@@ -95,9 +94,7 @@ class TestProfileLoadIntegration:
         assert context_manager.watched_patterns == {"src/*.py", "*.md"}
         assert set(context_manager.list_ignore_patterns()) == {"*.txt"}
 
-    def test_load_non_existent_profile(
-        self, profile_manager: ProfileManager
-    ) -> None:
+    def test_load_non_existent_profile(self, profile_manager: ProfileManager) -> None:
         """Test loading a profile that doesn't exist."""
         with pytest.raises(ProfileNotFoundError) as exc_info:
             profile_manager.load_profile("non-existent")
@@ -148,8 +145,7 @@ class TestProfileLoadIntegration:
         context_manager.apply_profile(backend_profile)
         assert len(context_manager.files) == 1  # Only .py file
         assert all(
-            f.endswith(".py")
-            for f in context_manager.get_file_paths(relative=False)
+            f.endswith(".py") for f in context_manager.get_file_paths(relative=False)
         )
 
     def test_profile_with_complex_patterns(
