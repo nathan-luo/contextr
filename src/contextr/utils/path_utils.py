@@ -36,7 +36,7 @@ def make_relative(path: str, base_dir: Path) -> str:
             # Compare paths case-insensitively
             if path_str.lower().startswith(base_str.lower()):
                 # Calculate relative path preserving original case
-                rel_path = path_str[len(base_str):]
+                rel_path = path_str[len(base_str) :]
                 if rel_path.startswith(os.sep):
                     rel_path = rel_path[1:]
                 # Return with OS-specific separators
