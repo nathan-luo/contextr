@@ -141,8 +141,11 @@ class TestContextManagerStorage:
             result = manager.load_state("saved_state")
 
         assert result is True
-        expected_file = str(Path("/test/dir") / "loaded_file.py")
-        assert expected_file in manager.files
+        # Check that the loaded file is in the files set
+        # On Windows, paths will have drive letters, so we check the end of the path
+        loaded_files = list(manager.files)
+        assert len(loaded_files) == 1
+        assert loaded_files[0].endswith("loaded_file.py")
         assert "loaded/*.py" in manager.watched_patterns
 
     def test_list_saved_states_uses_storage(

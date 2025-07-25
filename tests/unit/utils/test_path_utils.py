@@ -78,8 +78,9 @@ class TestMakeAbsolute:
         result_path = Path(result)
         home_path = Path.home()
         assert result_path.parts[: len(home_path.parts)] == home_path.parts
-        # Check the relative part matches
-        assert result_path.parts[-2:] == ("documents", "file.txt")
+        # Check the relative part matches (case-insensitive for directory name)
+        assert result_path.parts[-1] == "file.txt"
+        assert result_path.parts[-2].lower() == "documents"
 
     def test_environment_variable_expansion(
         self, monkeypatch: pytest.MonkeyPatch
