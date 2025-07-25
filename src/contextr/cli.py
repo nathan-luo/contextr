@@ -8,6 +8,7 @@ from rich.table import Table
 
 from .formatters import format_export_content, get_file_tree
 from .manager import ContextManager
+from .profile import ProfileManager
 
 app = typer.Typer(help="ctxr - Share your codebase with Large Language Models")
 console = Console()
@@ -256,6 +257,87 @@ def init() -> None:
 def version() -> None:
     """Print version information."""
     console.print(f"[bold green]ctxr v{VERSION}[/bold green]")
+
+
+# Create profile subcommand group
+profile_app = typer.Typer(help="Manage context profiles")
+app.add_typer(profile_app, name="profile")
+
+
+@profile_app.command("save")
+def profile_save(
+    name: str = typer.Argument(..., help="Name for the profile"),
+    description: str = typer.Option(
+        "", "--description", "-d", help="Profile description"
+    ),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Overwrite without confirmation"
+    ),
+) -> None:
+    """
+    Save current context as a named profile.
+
+    Example: ctxr profile save frontend --description "Frontend development context"
+    """
+    # Create ProfileManager instance
+    profile_manager = ProfileManager(context_manager.storage, context_manager.base_dir)
+
+    # Get current context state
+    watched_patterns = list(context_manager.watched_patterns)
+    ignore_patterns = context_manager.list_ignore_patterns()
+
+    # Check if profile exists and handle overwrite
+    key = f"profiles/{name}"
+    if context_manager.storage.exists(key) and not force:
+        confirm = typer.confirm(f"Profile '{name}' already exists. Overwrite?")
+        if not confirm:
+            console.print("[yellow]Profile save cancelled.[/yellow]")
+            return
+        force = True
+
+    # Save profile
+    success = profile_manager.save_profile(
+        name=name,
+        watched_patterns=watched_patterns,
+        ignore_patterns=ignore_patterns,
+        description=description,
+        force=force,
+    )
+
+    if success:
+        console.print(f"[green]✓ Profile '{name}' saved successfully![/green]")
+        if description:
+            console.print(f"  Description: {description}")
+        console.print(f"  Watched patterns: {len(watched_patterns)}")
+        console.print(f"  Ignore patterns: {len(ignore_patterns)}")
+    else:
+        console.print(f"[red]Failed to save profile '{name}'[/red]")
+
+
+@profile_app.command("list")
+def profile_list() -> None:
+    """
+    List all saved profiles.
+
+    Example: ctxr profile list
+    """
+    # Create ProfileManager instance
+    profile_manager = ProfileManager(context_manager.storage, context_manager.base_dir)
+
+    # Get all profiles
+    profiles = profile_manager.list_profiles()
+
+    if not profiles:
+        console.print("[yellow]No saved profiles found.[/yellow]")
+        console.print(
+            "\nCreate your first profile with: [bold]ctxr profile save <name>[/bold]"
+        )
+        return
+
+    # Display profiles table
+    table = profile_manager.format_profiles_table(profiles)
+    console.print(table)
+    console.print(f"\n[dim]Total profiles: {len(profiles)}[/dim]")
 
 
 def main() -> None:
