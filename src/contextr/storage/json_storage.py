@@ -60,7 +60,7 @@ class JsonStorage(StorageBackend):
             IOError: If save operation fails
         """
         file_path = self._get_file_path(key)
-        temp_path = file_path.with_suffix('.tmp')
+        temp_path = file_path.with_suffix(".tmp")
 
         try:
             # Write to temporary file first

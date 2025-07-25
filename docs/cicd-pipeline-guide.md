@@ -50,14 +50,15 @@ strategy:
   fail-fast: false
   matrix:
     os: [ubuntu-latest, windows-latest, macos-latest]
-    python-version: ["3.13"]
+    python-version: ["3.12", "3.13"]
 ```
 
-This creates 3 parallel jobs testing Python 3.13 across all supported operating systems.
+This creates 6 parallel jobs testing all combinations of OS and Python versions.
 
 ### Workflow Steps Breakdown
 
 1. **Environment Setup**
+
    ```yaml
    - uses: actions/checkout@v4
    - uses: astral-sh/setup-uv@v5
@@ -65,27 +66,31 @@ This creates 3 parallel jobs testing Python 3.13 across all supported operating 
        enable-cache: true
        cache-dependency-glob: "uv.lock"
    ```
+
    - Leverages uv's caching mechanism for faster builds
    - Cache key based on `uv.lock` ensures cache invalidation on dependency changes
 
 2. **Quality Checks**
+
    ```yaml
-   - run: uv run ruff format . --check  # Formatting verification
-   - run: uv run ruff check .           # Linting (F, E/W, I rules)
-   - run: uv run pyright                # Strict type checking
+   - run: uv run ruff format . --check # Formatting verification
+   - run: uv run ruff check . # Linting (F, E/W, I rules)
+   - run: uv run pyright # Strict type checking
    ```
 
 3. **Test Execution**
+
    ```yaml
    - run: uv run pytest --cov=contextr --cov-report=term-missing --cov-report=xml
    ```
+
    - Generates both terminal and XML coverage reports
    - Current baseline: 89 tests, 62% coverage
 
 4. **Coverage Reporting**
    ```yaml
    - uses: codecov/codecov-action@v4
-     if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+     if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
    ```
    - Single upload to avoid duplicate reports
    - Requires `CODECOV_TOKEN` secret (optional but recommended)
@@ -93,7 +98,7 @@ This creates 3 parallel jobs testing Python 3.13 across all supported operating 
 ### Performance Optimizations
 
 - **Dependency caching**: ~60% reduction in installation time
-- **Parallel execution**: 3 jobs run simultaneously
+- **Parallel execution**: 6 jobs run simultaneously
 - **Selective coverage upload**: Prevents redundant API calls
 
 ## Release Workflow Implementation
@@ -104,25 +109,29 @@ The release workflow (`.github/workflows/release.yml`) automates PyPI package pu
 
 ```yaml
 jobs:
-  build:     # Builds and validates distribution
-  publish:   # Publishes to PyPI (depends on build)
+  build: # Builds and validates distribution
+  publish: # Publishes to PyPI (depends on build)
 ```
 
 ### Build Job Details
 
 1. **Package Building**
+
    ```yaml
    - run: |
        uv pip install --system build twine
        python -m build
    ```
+
    - Uses PEP 517 build isolation
    - Generates both wheel and sdist distributions
 
 2. **Distribution Validation**
+
    ```yaml
    - run: twine check dist/*
    ```
+
    - Validates package metadata
    - Ensures PyPI compatibility before upload
 
@@ -152,9 +161,11 @@ environment:
 The workflow supports two authentication methods:
 
 1. **Trusted Publishing** (Recommended)
+
    ```yaml
    - uses: pypa/gh-action-pypi-publish@release/v1
    ```
+
    - Uses OpenID Connect (OIDC) for authentication
    - No long-lived credentials required
 
@@ -173,6 +184,7 @@ The workflow supports two authentication methods:
 Trusted publishing eliminates the need for API tokens by establishing trust between GitHub Actions and PyPI.
 
 1. **PyPI Configuration**
+
    - Navigate to: PyPI → Account Settings → Publishing
    - Add publisher with parameters:
      ```
@@ -192,6 +204,7 @@ Trusted publishing eliminates the need for API tokens by establishing trust betw
 For environments where trusted publishing is unavailable:
 
 1. **Token Generation**
+
    - Scope: Project-specific recommended over account-wide
    - Naming convention: `contextr-github-actions`
 
@@ -226,8 +239,12 @@ main (protected) ← dev (default) ← feature branches
 ### Required Status Checks
 
 The CI workflow creates the following status checks:
+
+- `test (ubuntu-latest, 3.12)`
 - `test (ubuntu-latest, 3.13)`
+- `test (windows-latest, 3.12)`
 - `test (windows-latest, 3.13)`
+- `test (macos-latest, 3.12)`
 - `test (macos-latest, 3.13)`
 
 Configure branch protection to require all matrix jobs.
@@ -237,6 +254,7 @@ Configure branch protection to require all matrix jobs.
 ### Release Process
 
 1. **Version Preparation**
+
    ```bash
    # From dev branch
    git checkout -b release/v1.0.1
@@ -245,6 +263,7 @@ Configure branch protection to require all matrix jobs.
    ```
 
 2. **Release PR Flow**
+
    ```bash
    # Create PR: release/v1.0.1 → main
    # After merge:
@@ -264,15 +283,17 @@ Configure branch protection to require all matrix jobs.
 ### Monitoring Deployments
 
 1. **GitHub Actions Dashboard**
+
    - Real-time workflow execution
    - Step-by-step logs
    - Artifact downloads
 
 2. **PyPI Verification**
+
    ```bash
    # Verify package availability
    pip index versions contextr
-   
+
    # Test installation
    pip install contextr==1.0.1
    ```
@@ -280,6 +301,7 @@ Configure branch protection to require all matrix jobs.
 ### Rollback Procedures
 
 1. **Pre-publish Rollback**
+
    ```bash
    git tag -d v1.0.1
    git push origin :refs/tags/v1.0.1
@@ -295,6 +317,7 @@ Configure branch protection to require all matrix jobs.
 ### Common CI Failures
 
 1. **Platform-Specific Test Failures**
+
    ```python
    # Issue: Path separator differences
    # Solution: Use pathlib
@@ -303,9 +326,10 @@ Configure branch protection to require all matrix jobs.
    ```
 
 2. **Type Checking Errors**
+
    ```bash
    # Local verification
-   uv run pyright --pythonversion 3.13
+   uv run pyright --pythonversion 3.12
    ```
 
 3. **Coverage Threshold Failures**
@@ -318,6 +342,7 @@ Configure branch protection to require all matrix jobs.
 ### Release Pipeline Issues
 
 1. **Build Failures**
+
    ```bash
    # Local build testing
    python -m build
@@ -325,6 +350,7 @@ Configure branch protection to require all matrix jobs.
    ```
 
 2. **Authentication Errors**
+
    - Verify trusted publisher configuration
    - Check token scope and expiration
    - Ensure environment name matches
@@ -338,6 +364,7 @@ Configure branch protection to require all matrix jobs.
 ### Performance Optimization
 
 1. **Workflow Duration Analysis**
+
    - Check Actions → Workflow → Timing
    - Identify bottlenecks in test matrix
    - Consider job parallelization
@@ -372,15 +399,17 @@ uv lock --upgrade-package pytest
 ### Security Considerations
 
 1. **Secret Rotation**
+
    - Rotate PyPI tokens quarterly
    - Use project-scoped tokens
    - Enable 2FA on PyPI account
 
 2. **Workflow Permissions**
+
    ```yaml
    permissions:
      contents: read
-     id-token: write  # Only for trusted publishing
+     id-token: write # Only for trusted publishing
    ```
 
 3. **Supply Chain Security**

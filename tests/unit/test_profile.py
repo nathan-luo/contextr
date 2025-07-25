@@ -116,9 +116,7 @@ class TestProfileManager:
         assert saved_data["ignore_patterns"] == ["*.pyc"]
         assert saved_data["metadata"]["description"] == "Test description"
 
-    def test_save_profile_invalid_name(
-        self, profile_manager: ProfileManager
-    ) -> None:
+    def test_save_profile_invalid_name(self, profile_manager: ProfileManager) -> None:
         """Test saving a profile with invalid name."""
         with pytest.raises(ValueError) as exc_info:
             profile_manager.save_profile(
@@ -369,9 +367,7 @@ class TestProfileManager:
         # Test length validation
         assert profile_manager._validate_profile_name("a" * 101) is False  # type: ignore[reportPrivateUsage]
 
-    def test_format_profiles_table(
-        self, profile_manager: ProfileManager
-    ) -> None:
+    def test_format_profiles_table(self, profile_manager: ProfileManager) -> None:
         """Test formatting profiles as a table."""
         profiles = [
             Profile(
@@ -411,7 +407,7 @@ class TestProfileManager:
         (".", False),
         ("..", False),
         ("a" * 100, True),  # Exactly 100 chars is valid
-        ("a" * 101, False), # 101 chars is invalid
+        ("a" * 101, False),  # 101 chars is invalid
     ],
 )
 def test_profile_name_validation_parametrized(

@@ -272,7 +272,9 @@ class TestContextManagerStorage:
         # Verify context was cleared and profile patterns applied
         assert manager.watched_patterns == {"src/**/*.py", "tests/**/*.py"}
         assert manager.ignore_manager.patterns == {
-            "*.pyc", "__pycache__", ".pytest_cache"
+            "*.pyc",
+            "__pycache__",
+            ".pytest_cache",
         }
 
         # Files should be cleared initially by clear() but may be
