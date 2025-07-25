@@ -1,194 +1,262 @@
-Of course. Here is the complete and finalized Product Requirements Document.
-
 # contextr Product Requirements Document (PRD)
 
-## Goals and Background Context
+## Executive Summary
 
-### Goals (Revised)
+`contextr` is a CLI tool that bundles project files for sharing with Large Language Models (LLMs). This PRD defines the project's requirements, current state, and future roadmap.
 
-- To evolve `contextr` from a simple file bundler into an intelligent context manager.
-- To significantly improve workflow efficiency for developers who use LLMs for multiple, distinct tasks.
-- To empower users to define, save, and instantly load different "Context Profiles" for various development scenarios.
-- To enable switching between complex file contexts with a single, memorable command.
-- To improve the maintainability and robustness of the core implementation by refactoring key components to cleanly support the new Profiles feature.
+## Current State (As of July 2025)
 
-### Background Context
+### Implemented Features
+- **File Management**: Watch/ignore patterns for tracking files
+- **Output Formatting**: XML-style output optimized for LLM consumption  
+- **Clipboard Integration**: Direct copy to clipboard functionality
+- **State Persistence**: JSON-based state management
+- **Modern Development Tooling**: Ruff linting/formatting, Pyright type checking, pytest framework
+- **Storage Abstraction**: Pluggable storage backend architecture
 
-The current version of `contextr` successfully addresses the basic need to bundle project files for an LLM. However, its reliance on a single, static context is a significant pain point for developers who frequently switch tasks. Manually reconfiguring watched and ignored files for each new task is inefficient and can lead to providing incomplete or irrelevant context to the AI, ultimately degrading the quality of assistance.
+### Technology Stack
+- **Language**: Python 3.12+
+- **CLI Framework**: Typer with Rich for terminal UI
+- **Build System**: Modern pyproject.toml with uv package manager
+- **Code Quality**: Ruff (linting/formatting), Pyright (strict type checking)
+- **Testing**: pytest with 40+ tests, ~42% coverage
 
-This PRD outlines the requirements for a "Context Profiles" feature. This system will allow users to save and load named sets of file patterns, transforming `contextr` into a dynamic, task-aware tool that streamlines the developer's workflow.
+## Goals and Vision
 
-### Change Log
+### Primary Goals
+1. Evolve `contextr` from a simple file bundler into an intelligent context manager
+2. Enable developers to define, save, and instantly load different "Context Profiles" 
+3. Significantly improve workflow efficiency for developers using LLMs for multiple tasks
+4. Maintain simplicity and ease of use while adding powerful features
 
-| Date       | Version | Description       | Author    |
-| :--------- | :------ | :---------------- | :-------- |
-| 23/07/2025 | 1.0     | Initial PRD Draft | John (PM) |
+### Success Metrics
+- Context switch time reduced from minutes to seconds
+- Zero data loss during profile operations
+- 80%+ test coverage across codebase
+- 100% type coverage with strict checking
+- Sub-100ms profile operation performance
 
 ## Requirements
 
-### Functional
+### Functional Requirements
 
-1.  **FR1:** The system must provide a CLI command to save the current context (both watched file patterns and ignore patterns) to a persistent, named profile.
-2.  **FR2:** The system must provide a CLI command to load a named profile, which will clear the current context and replace it with the one from the profile.
-3.  **FR3:** The system must provide a CLI command to display a list of all currently saved profiles.
-4.  **FR4:** The system must provide a CLI command to delete a specified profile.
-5.  **FR5:** The process of loading a profile must be idempotent; loading the same profile multiple times will result in the same context.
+#### Core Features (Implemented)
+1. **FR-CORE-1**: Add file patterns to track using glob syntax
+2. **FR-CORE-2**: Add ignore patterns using gitignore syntax  
+3. **FR-CORE-3**: List all tracked files with current patterns
+4. **FR-CORE-4**: Clear all patterns and reset context
+5. **FR-CORE-5**: Sync (copy) formatted output to clipboard
 
-### Non-Functional
+#### Profile Management (To Be Implemented - Epic 2)
+1. **FR-PROF-1**: Save current context as a named profile
+2. **FR-PROF-2**: Load a named profile to replace current context
+3. **FR-PROF-3**: List all saved profiles with metadata
+4. **FR-PROF-4**: Delete a specified profile with confirmation
+5. **FR-PROF-5**: Profile operations must be idempotent
 
-1.  **NFR1:** All new commands must be integrated into the existing `Typer` CLI application, following its established conventions for arguments and help text.
-2.  **NFR2:** The profile storage system must be file-based and self-contained within the project's `.contextr` directory, introducing no external database dependencies.
-3.  **NFR3:** The new feature must not introduce any breaking changes to the existing `watch`, `ignore`, and `sync` command workflows.
-4.  **NFR4:** The implementation must align with modern Python best practices by incorporating `Ruff` for linting/formatting and `Pyright` for strict type checking.
-5.  **NFR5:** The feature must maintain the existing cross-platform support for Linux, macOS, and Windows.
+### Non-Functional Requirements
 
-## Technical Assumptions
+#### Performance
+1. **NFR-PERF-1**: Profile operations complete in <100ms
+2. **NFR-PERF-2**: File discovery scales to 10k+ files
+3. **NFR-PERF-3**: Minimal memory footprint for large contexts
 
-### Repository Structure: Monorepo
+#### Quality
+1. **NFR-QUAL-1**: 80%+ test coverage
+2. **NFR-QUAL-2**: 100% type coverage with strict checking
+3. **NFR-QUAL-3**: Zero linting errors or warnings
+4. **NFR-QUAL-4**: All code follows project style guidelines
 
-The project will continue to be developed within a single repository, as it is a self-contained application.
+#### Compatibility
+1. **NFR-COMP-1**: Cross-platform support (Linux, macOS, Windows)
+2. **NFR-COMP-2**: No breaking changes to existing CLI interface
+3. **NFR-COMP-3**: Backward compatible state file format
+4. **NFR-COMP-4**: Python 3.12+ requirement
 
-### Service Architecture: Monolithic CLI Application
+#### Architecture
+1. **NFR-ARCH-1**: Pluggable storage backend system
+2. **NFR-ARCH-2**: Clear separation of concerns
+3. **NFR-ARCH-3**: Extensible for future enhancements
+4. **NFR-ARCH-4**: No external database dependencies
 
-The new functionality will be integrated directly into the existing monolithic application structure, primarily within the `ContextManager` and `cli.py` modules. No microservices or external services are required.
+## Technical Architecture
 
-### Testing Requirements: Unit + Integration
+### Current Implementation
 
-- All new functionality must be accompanied by unit tests using **`pytest`**.
-- Integration tests will be required to ensure the new `profile` commands interact correctly with the file system and the application's state.
-- Before code can be merged, it must pass a full quality suite, including: `ruff format`, `ruff check`, `pyright`, and `pytest`.
+```
+src/contextr/
+├── cli.py                 # CLI commands (Typer-based)
+├── manager.py             # Core ContextManager with storage abstraction
+├── formatters.py          # Output formatting (XML for LLMs)
+├── storage/               # Storage abstraction layer
+│   ├── base.py           # StorageBackend ABC
+│   └── json_storage.py   # JSON file implementation
+└── utils/                # Utilities
+    ├── ignore_utils.py   # Gitignore pattern matching
+    └── path_utils.py     # Path manipulation
+```
 
-### Additional Technical Assumptions and Requests
+### Storage Design
 
-- **State Management:** Profile data will be stored in a file-based system within the `.contextr` directory, following the existing pattern for `state.json`.
-- **Framework:** The `Typer` framework will be used to implement the new CLI commands, ensuring consistency with the existing interface.
-- **Dependencies:** All project dependencies will be managed using `uv`. Any new libraries must be added via `uv add` and recorded in `pyproject.toml`.
+- **Abstraction**: `StorageBackend` ABC for extensibility
+- **Implementation**: `JsonStorage` with atomic file operations
+- **State Location**: `.contextr/state.json`
+- **Profile Location**: `.contextr/profiles/` (future)
 
-## Epic 1: Project Modernization & Foundation
+### Key Design Decisions
 
-**Epic Goal:** This epic focuses on improving the project's long-term health and developer experience. We will integrate a comprehensive suite of modern tooling for linting, formatting, and type-checking. We will also introduce a testing framework and refactor the core `ContextManager` to make it more modular and ready for new features, ensuring that all future development is built on a stable and maintainable foundation.
+1. **Storage Abstraction**: Enables future backends (SQLite, cloud, etc.)
+2. **Dependency Injection**: ContextManager accepts storage backend
+3. **Atomic Operations**: Prevents data corruption
+4. **Type Safety**: Full type annotations with strict checking
 
-### Story 1.1: Integrate Ruff for Linting and Formatting
+## Epic Roadmap
 
-- **As a** developer,
-- **I want** `Ruff` integrated into the project,
-- **so that** code formatting and linting are automated and consistent.
+### Epic 1: Project Modernization & Foundation ✅ COMPLETED
 
-**Acceptance Criteria:**
+**Status**: All 4 stories completed and deployed
 
-1.  `Ruff` is added as a development dependency in `pyproject.toml`.
-2.  A `[tool.ruff]` configuration is added to `pyproject.toml` with rules for formatting, import sorting (`I`), and core pyflakes checks (`F`).
-3.  The entire existing codebase is successfully formatted and linted using the new `Ruff` configuration.
-4.  The project's contribution guidelines (`CLAUDE.md` or a new `CONTRIBUTING.md`) are updated with instructions on how to use `Ruff`.
+1. **Story 1.1**: Integrate Ruff ✅
+2. **Story 1.2**: Configure Pyright ✅  
+3. **Story 1.3**: Set Up Pytest ✅
+4. **Story 1.4**: Refactor ContextManager ✅
 
-### Story 1.2: Configure Pyright for Strict Type Checking
+**Outcomes**:
+- Modern development tooling fully integrated
+- Comprehensive type annotations added
+- Test infrastructure established (40+ tests)
+- Storage abstraction implemented
 
-- **As a** developer,
-- **I want** `Pyright` configured for strict type checking,
-- **so that** I can catch type-related errors early and improve code reliability.
+### Epic 2: Context Profile Management 🚧 READY TO START
 
-**Acceptance Criteria:**
+**Goal**: Implement full profile lifecycle management
 
-1.  `Pyright` is added as a development dependency in `pyproject.toml`.
-2.  A `[tool.pyright]` configuration is added to `pyproject.toml` enabling `strict` mode.
-3.  All type errors in the existing codebase are resolved to satisfy the strict checking rules.
-4.  The project's contribution guidelines are updated with instructions on how to run `Pyright`.
+#### Story 2.1: Save and List Context Profiles
+- Command: `ctxr profile save <name>`
+- Command: `ctxr profile list`
+- Overwrite protection with confirmation
+- Profile metadata (created/updated timestamps)
 
-### Story 1.3: Set Up Pytest Framework
+#### Story 2.2: Load a Context Profile  
+- Command: `ctxr profile load <name>`
+- Clear current context before loading
+- Automatic file list refresh
+- Error handling for missing profiles
 
-- **As a** developer,
-- **I want** the `pytest` framework set up,
-- **so that** I can write and run automated tests for the application.
+#### Story 2.3: Delete a Context Profile
+- Command: `ctxr profile delete <name>`
+- Confirmation prompt required
+- Filesystem cleanup
+- Clear error messages
 
-**Acceptance Criteria:**
+### Future Epics (Backlog)
 
-1.  `pytest` is added as a development dependency.
-2.  A `tests/` directory is created.
-3.  `pytest` can be executed successfully and discovers tests within the `tests/` directory.
-4.  A simple unit test is created for a utility function (e.g., in `path_utils.py`) that passes when `pytest` is run.
+#### Epic 3: Enhanced User Experience
+- Profile templates for common project types
+- Auto-detection of project type
+- Interactive profile creation wizard
+- Profile composition/inheritance
 
-### Story 1.4: Refactor ContextManager for Extensibility
+#### Epic 4: Team Collaboration
+- Profile sharing/export functionality
+- Cloud sync for profiles
+- Team profile repository
+- Version control integration
 
-- **As a** developer,
-- **I want** the `ContextManager` refactored,
-- **so that** its state-loading and saving logic can be easily extended to support profiles without modifying its core responsibilities.
+#### Epic 5: Advanced Features
+- Multiple output formats (JSON, Markdown)
+- Incremental context updates
+- Context diffing between profiles
+- Plugin system for extensions
 
-**Acceptance Criteria:**
+## Implementation Guidelines
 
-1.  The logic for reading from and writing to `state.json` is decoupled from the in-memory context management.
-2.  The refactored `ContextManager` maintains all existing functionality.
-3.  Unit tests are written for the `ContextManager`'s core state manipulation methods (e.g., `add_files`, `remove_files`).
-4.  The class and its methods are documented to reflect the new internal structure.
+### Development Process
+1. All code must pass: `uv run ruff format .` and `uv run ruff check .`
+2. Type checking required: `uv run pyright` with zero errors
+3. Tests required for new features: `uv run pytest`
+4. Update documentation for all changes
 
-## Epic 2: Context Profile Management
+### Code Style
+- Line length: 88 characters (Black standard)
+- Imports: Sorted with Ruff (I rules)
+- Docstrings: Google style with Args/Returns
+- Type hints: Required for all public APIs
 
-**Epic Goal:** This epic delivers the core user-facing "Context Profiles" feature. Building on the modernized foundation from Epic 1, we will implement the full lifecycle of profile management: creating, loading, listing, and deleting. The outcome will be a significantly more efficient workflow for developers, allowing them to switch between different task-specific contexts with a single command.
+### Testing Strategy
+- Unit tests for all new functions
+- Integration tests for CLI commands
+- Mock external dependencies
+- Minimum 80% coverage target
 
-### Story 2.1: Save and List Context Profiles
+## Risk Assessment
 
-- **As a** developer,
-- **I want** to save my current context to a named profile and list all existing profiles,
-- **so that** I can begin organizing and managing my different project contexts.
+### Technical Risks
+1. **Profile Corruption**: Mitigated by atomic writes
+2. **Performance Degradation**: Monitor with large contexts
+3. **Storage Compatibility**: Maintain format versioning
 
-**Acceptance Criteria:**
+### User Experience Risks
+1. **Confusion with Multiple Profiles**: Clear status indicators
+2. **Accidental Data Loss**: Confirmation prompts
+3. **Complex Commands**: Intuitive CLI design
 
-1.  A new command, `ctxr profile save <profile-name>`, is implemented.
-2.  Executing the `save` command creates a persistent record of the current session's `watched_patterns` and `ignore_patterns` under the given name.
-3.  A new command, `ctxr profile list`, is implemented.
-4.  Executing the `list` command displays a table of all saved profile names.
-5.  Attempting to save a profile with a name that already exists will prompt the user for confirmation before overwriting.
-6.  Unit tests are created to verify the profile saving and listing logic.
+## Change Log
 
-### Story 2.2: Load a Context Profile
+| Date       | Version | Description                           | Author      |
+|------------|---------|---------------------------------------|-------------|
+| 2025-07-23 | 1.0     | Initial PRD                          | John (PM)   |
+| 2025-07-23 | 1.1     | Epic 1 completed                     | Dev Team    |
+| 2025-07-25 | 2.0     | Updated with current state           | Bob (SM)    |
 
-- **As a** developer,
-- **I want** to load a saved profile,
-- **so that** I can instantly switch my active `contextr` configuration to match a specific task.
+## Appendices
 
-**Acceptance Criteria:**
+### A. Profile Schema (Proposed)
+```json
+{
+  "name": "frontend",
+  "watched_patterns": ["src/**/*.tsx", "src/**/*.css"],
+  "ignore_patterns": ["**/*.test.tsx", "build/**"],
+  "metadata": {
+    "created_at": "2025-07-25T12:00:00Z",
+    "updated_at": "2025-07-25T12:00:00Z",
+    "description": "Frontend development context"
+  }
+}
+```
 
-1.  A new command, `ctxr profile load <profile-name>`, is implemented.
-2.  Executing the `load` command first clears the application's current context (watched patterns, ignored patterns, and files).
-3.  The command then populates the application's context from the specified profile.
-4.  After a profile is loaded, the file list is immediately refreshed to reflect the new patterns.
-5.  Executing `ctxr list` after loading a profile displays the correct set of files.
-6.  The system provides a clear error message if the user tries to load a profile that does not exist.
-7.  Unit tests are created to verify the profile loading mechanism.
+### B. CLI Command Reference
 
-### Story 2.3: Delete a Context Profile
+#### Current Commands
+- `ctxr watch <pattern>` - Add watch pattern
+- `ctxr ignore <pattern>` - Add ignore pattern  
+- `ctxr list` - Show tracked files
+- `ctxr clear` - Clear all patterns
+- `ctxr sync` - Copy to clipboard
 
-- **As a** developer,
-- **I want** to delete a saved profile,
-- **so that** I can remove old or irrelevant contexts from my project.
+#### Planned Profile Commands (Epic 2)
+- `ctxr profile save <name>` - Save current as profile
+- `ctxr profile load <name>` - Load profile
+- `ctxr profile list` - List all profiles
+- `ctxr profile delete <name>` - Delete profile
 
-**Acceptance Criteria:**
+### C. Success Criteria Checklist
 
-1.  A new command, `ctxr profile delete <profile-name>`, is implemented.
-2.  The command prompts the user for confirmation before proceeding with the deletion.
-3.  Executing the `delete` command permanently removes the specified profile.
-4.  The deleted profile no longer appears in the output of `ctxr profile list`.
-5.  The system provides a clear error message if the user tries to delete a profile that does not exist.
-6.  Unit tests are created to verify the profile deletion logic.
+#### Epic 1 ✅
+- [x] Ruff integrated and configured
+- [x] Pyright in strict mode with 100% coverage
+- [x] Pytest framework with 40+ tests
+- [x] Storage abstraction implemented
+- [x] All existing functionality maintained
 
-## Checklist Results Report
+#### Epic 2 (Pending)
+- [ ] Profile save functionality
+- [ ] Profile load with context switching
+- [ ] Profile listing with metadata
+- [ ] Profile deletion with safety
+- [ ] Integration tests for all workflows
+- [ ] User documentation updated
 
-### **Validation Summary**
+## Conclusion
 
-- **Overall PRD Completeness:** 95%
-- **MVP Scope Appropriateness:** Just Right
-- **Readiness for Architecture Phase:** Ready
-- **Most Critical Gaps:** None. One minor non-functional requirement could be added for completeness.
-
-### **Category Analysis**
-
-| Category                         | Status  | Critical Issues                                                                   |
-| :------------------------------- | :------ | :-------------------------------------------------------------------------------- |
-| 1. Problem Definition & Context  | PASS    | None                                                                              |
-| 2. MVP Scope Definition          | PASS    | None                                                                              |
-| 3. User Experience Requirements  | N/A     | Project is a CLI application.                                                     |
-| 4. Functional Requirements       | PASS    | None                                                                              |
-| 5. Non-Functional Requirements   | PARTIAL | No explicit security requirements for file storage (low risk, but good practice). |
-| 6. Epic & Story Structure        | PASS    | None                                                                              |
-| 7. Technical Guidance            | PASS    | None                                                                              |
-| 8. Cross-Functional Requirements | N/A     | Self-contained CLI tool.                                                          |
-| 9. Clarity & Communication       | PASS    | None                                                                              |
+This PRD serves as the single source of truth for the `contextr` project. Epic 1 has successfully modernized the codebase with professional development tooling and a solid architectural foundation. The project is now ready to proceed with Epic 2, implementing the Context Profile Management feature that will transform `contextr` from a simple file bundler into an intelligent context manager for developers working with LLMs.
