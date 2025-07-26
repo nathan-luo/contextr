@@ -95,13 +95,13 @@ class TestContextManagerStorage:
     def test_add_files_saves_state(
         self, manager_with_mock_storage: ContextManager, mock_storage: MockStorage
     ) -> None:
-        """Test that add_files saves state through storage."""
+        """Test that _add_files saves state through storage."""
         manager = manager_with_mock_storage
 
         with patch("contextr.manager.normalize_paths") as mock_normalize:
             mock_normalize.return_value = ["/test/dir/new_file.py"]
             with patch("pathlib.Path.is_file", return_value=True):
-                manager.add_files(["new_file.py"])
+                manager._add_files(["new_file.py"])
 
         assert mock_storage.save_called >= 1
         assert "state" in mock_storage.data
@@ -271,7 +271,7 @@ class TestContextManagerStorage:
         )
 
         # Apply the profile
-        manager.apply_profile(profile)
+        manager.apply_profile(profile, "test-profile")
 
         # Verify context was cleared and profile patterns applied
         assert manager.watched_patterns == {"src/**/*.py", "tests/**/*.py"}
@@ -331,12 +331,12 @@ class TestContextManagerStorage:
         )
 
         # Apply profile first time
-        manager.apply_profile(profile)
+        manager.apply_profile(profile, "test-profile")
         first_patterns = manager.watched_patterns.copy()
         first_ignore = manager.ignore_manager.patterns.copy()
 
         # Apply profile second time
-        manager.apply_profile(profile)
+        manager.apply_profile(profile, "test-profile")
         second_patterns = manager.watched_patterns
         second_ignore = manager.ignore_manager.patterns
 
