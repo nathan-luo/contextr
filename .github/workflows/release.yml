@@ -25,15 +25,11 @@ jobs:
       - name: Set up Python
         run: uv python install 3.13
 
-      - name: Install build dependencies
-        run: |
-          uv pip install build twine
-
       - name: Build package
-        run: uv run python -m build
+        run: uvx --from build pyproject-build --outdir dist
 
       - name: Check distribution
-        run: uv run twine check dist/*
+        run: uvx twine check dist/*
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
