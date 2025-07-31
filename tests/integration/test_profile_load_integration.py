@@ -87,7 +87,7 @@ class TestProfileLoadIntegration:
 
         # Load profile
         profile = profile_manager.load_profile("test-profile")
-        context_manager.apply_profile(profile)
+        context_manager.apply_profile(profile, "test-profile")
 
         # Verify restored state
         assert len(context_manager.files) == 3  # Files should be refreshed
@@ -133,7 +133,7 @@ class TestProfileLoadIntegration:
 
         # Load frontend profile
         frontend_profile = profile_manager.load_profile("frontend")
-        context_manager.apply_profile(frontend_profile)
+        context_manager.apply_profile(frontend_profile, "frontend")
         assert len(context_manager.files) == 2  # .js and .css files
         assert all(
             f.endswith((".js", ".css"))
@@ -142,7 +142,7 @@ class TestProfileLoadIntegration:
 
         # Load backend profile
         backend_profile = profile_manager.load_profile("backend")
-        context_manager.apply_profile(backend_profile)
+        context_manager.apply_profile(backend_profile, "backend")
         assert len(context_manager.files) == 1  # Only .py file
         assert all(
             f.endswith(".py") for f in context_manager.get_file_paths(relative=False)
@@ -201,7 +201,7 @@ class TestProfileLoadIntegration:
         # Clear and reload
         context_manager.clear()
         profile = profile_manager.load_profile("python-project")
-        context_manager.apply_profile(profile)
+        context_manager.apply_profile(profile, "python-project")
 
         # Verify all Python files and README are included
         assert len(context_manager.files) == 6  # 4 .py files + 1 .md + setup.py
