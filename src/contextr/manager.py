@@ -40,6 +40,9 @@ class ContextManager:
         self.state_file: Path = self.state_dir / "state.json"
         self.storage: StorageBackend = storage or JsonStorage(self.state_dir)
         self.ignore_manager: IgnoreManager = IgnoreManager(self.base_dir)
+        self.current_profile_name: Optional[str] = None
+        self.is_dirty: bool = False
+        self._initial_state: Optional[Dict[str, List[str]]] = None
         self._load_state()
 
     def add_ignore_pattern(self, pattern: Pattern) -> Tuple[int, int]:
@@ -172,6 +175,10 @@ class ContextManager:
                 )
                 # Validate and load watched patterns
                 self.watched_patterns = set(data.get("watched_patterns", []))
+                # Load profile tracking state
+                self.current_profile_name = data.get("current_profile")
+                # Capture initial state for dirty checking
+                self._capture_initial_state()
         except IOError as e:
             console.print(f"[red]Error loading state: {e}[/red]")
 
@@ -183,13 +190,16 @@ class ContextManager:
                 "watched_patterns": sorted(
                     self.watched_patterns
                 ),  # Save watched patterns
+                "current_profile": self.current_profile_name,
             }
             self.storage.save("state", data)
+            # Check if state has changed
+            self._check_dirty_state()
         except IOError as e:
             console.print(f"[red]Error saving state: {e}[/red]")
 
-    def add_files(self, patterns: List[Pattern]) -> int:
-        """Add files, respecting ignore patterns."""
+    def _add_files(self, patterns: List[Pattern]) -> int:
+        """Internal method to add files, respecting ignore patterns."""
         abs_paths = normalize_paths(patterns, self.base_dir, self.ignore_manager)
         if not abs_paths:
             return 0
@@ -214,9 +224,9 @@ class ContextManager:
         self._save_state()
         return new_files_count
 
-    def remove_files(self, patterns: List[Pattern]) -> int:
+    def _remove_files(self, patterns: List[Pattern]) -> int:
         """
-        Remove files or directories from the context.
+        Internal method to remove files or directories from the context.
         If a directory is removed, all files under it are also removed.
 
         Args:
@@ -306,32 +316,32 @@ class ContextManager:
 
     def unwatch_paths(self, patterns: List[Pattern]) -> Tuple[int, int]:
         """
-        Remove paths from watch list but keep existing files.
+        Remove paths from watch list and automatically remove associated files.
 
         Args:
             patterns: List of patterns to stop watching
 
         Returns:
-            Tuple[int, int]: (Number of patterns removed, Number of files kept)
+            Tuple[int, int]: (Number of patterns removed, Number of files removed)
         """
         removed_patterns: Set[Pattern] = set()
-        affected_files: Set[FilePath] = set()
+        files_before = len(self.files)
 
+        # Remove patterns
         for pattern in patterns:
             if pattern in self.watched_patterns:
                 removed_patterns.add(pattern)
-                # Count files that were added by this pattern
-                abs_paths = normalize_paths(
-                    [pattern], self.base_dir, self.ignore_manager
-                )
-                for path in abs_paths:
-                    if path in self.files:
-                        affected_files.add(path)
 
         self.watched_patterns -= removed_patterns
+
+        # Auto-sync: Refresh to keep only files from remaining patterns
+        self.refresh_files()
+
+        files_removed = files_before - len(self.files)
+
         self._save_state()
 
-        return len(removed_patterns), len(affected_files)
+        return len(removed_patterns), files_removed
 
     def watch_paths(self, patterns: List[Pattern]) -> Tuple[int, int]:
         """
@@ -357,8 +367,8 @@ class ContextManager:
         new_patterns: Set[Pattern] = set(valid_patterns) - self.watched_patterns
         self.watched_patterns.update(new_patterns)
 
-        # Do initial file addition (ignore patterns are respected in add_files)
-        added_count = self.add_files(valid_patterns)
+        # Auto-sync: Add files matching the new patterns
+        added_count = self._add_files(valid_patterns)
 
         self._save_state()
         return len(new_patterns), added_count
@@ -385,7 +395,7 @@ class ContextManager:
         ]
 
         for pattern in valid_patterns:
-            added = self.add_files([pattern])
+            added = self._add_files([pattern])
             stats["added"] += added
 
         # Count removed files
@@ -516,26 +526,31 @@ class ContextManager:
             console.print(f"[red]Error deleting state '{state_name}': {e}[/red]")
             return False
 
-    def apply_profile(self, profile: Profile) -> None:
+    def apply_profile(self, profile: Profile, profile_name: str) -> None:
         """
         Replace current context with profile data.
 
         Args:
             profile: Profile object containing patterns to apply
+            profile_name: Name of the profile being loaded
 
         Side Effects:
             - Clears current context
             - Applies profile patterns
             - Triggers automatic file refresh
+            - Sets current profile name and resets dirty flag
         """
         self.clear()
         self.watched_patterns = set(profile.watched_patterns)
         self.ignore_manager.patterns = set(profile.ignore_patterns)
+        self.current_profile_name = profile_name
         self.refresh_files()
+        self.reset_dirty_state()  # Reset dirty tracking after loading profile
 
     def refresh_files(self) -> int:
         """
         Refresh files based on current watched patterns.
+        This is the primary sync mechanism that ensures files match watched patterns.
 
         Returns:
             int: Number of files added
@@ -546,7 +561,36 @@ class ContextManager:
         # Re-add all files from watched patterns
         total_added = 0
         for pattern in self.watched_patterns:
-            added = self.add_files([pattern])
+            added = self._add_files([pattern])
             total_added += added
 
         return total_added
+
+    def _capture_initial_state(self) -> None:
+        """Capture the current state for dirty checking."""
+        self._initial_state = {
+            "watched_patterns": sorted(self.watched_patterns),
+            "ignore_patterns": sorted(self.ignore_manager.patterns),
+        }
+        self.is_dirty = False
+
+    def reset_dirty_state(self) -> None:
+        """Public method to reset dirty state tracking."""
+        self._capture_initial_state()
+
+    def _check_dirty_state(self) -> None:
+        """Check if current state differs from initial state."""
+        if self._initial_state is None:
+            self._capture_initial_state()
+            return
+
+        current_state = {
+            "watched_patterns": sorted(self.watched_patterns),
+            "ignore_patterns": sorted(self.ignore_manager.patterns),
+        }
+
+        self.is_dirty = (
+            current_state["watched_patterns"] != self._initial_state["watched_patterns"]
+            or current_state["ignore_patterns"]
+            != self._initial_state["ignore_patterns"]
+        )
