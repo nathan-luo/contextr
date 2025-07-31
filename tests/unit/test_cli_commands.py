@@ -433,4 +433,3 @@ class TestProfileNewCommand:
             # Verify
             assert result.exit_code == 1  # Aborted
             assert "No watch patterns provided" in result.stdout
-

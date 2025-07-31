@@ -238,9 +238,7 @@ def gis() -> None:
 
         # Show total ignore patterns
         total_patterns = len(context_manager.list_ignore_patterns())
-        console.print(
-            f"\n[dim]Total ignore patterns now: {total_patterns}[/dim]"
-        )
+        console.print(f"\n[dim]Total ignore patterns now: {total_patterns}[/dim]")
     else:
         console.print("[yellow]No new patterns to sync from .gitignore[/yellow]")
         existing_count = len(context_manager.list_ignore_patterns())

@@ -590,8 +590,7 @@ class ContextManager:
         }
 
         self.is_dirty = (
-            current_state["watched_patterns"]
-            != self._initial_state["watched_patterns"]
+            current_state["watched_patterns"] != self._initial_state["watched_patterns"]
             or current_state["ignore_patterns"]
             != self._initial_state["ignore_patterns"]
         )
