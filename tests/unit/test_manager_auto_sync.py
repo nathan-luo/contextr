@@ -64,10 +64,12 @@ class TestContextManagerAutoSync:
 
         # Verify files are in context
         files = manager.get_file_paths(relative=True)
-        assert "src/__init__.py" in files
-        assert "src/main.py" in files
-        assert "src/utils/__init__.py" in files
-        assert "src/utils/helper.py" in files
+        # Normalize paths for cross-platform compatibility
+        normalized_files = [f.replace("\\", "/") for f in files]
+        assert "src/__init__.py" in normalized_files
+        assert "src/main.py" in normalized_files
+        assert "src/utils/__init__.py" in normalized_files
+        assert "src/utils/helper.py" in normalized_files
 
     def test_unwatch_paths_removes_files_automatically(
         self, manager: ContextManager, temp_dir: Path
@@ -88,8 +90,10 @@ class TestContextManagerAutoSync:
 
         # Verify only markdown files remain
         files = manager.get_file_paths(relative=True)
-        assert "README.md" in files
-        assert "src/main.py" not in files
+        # Normalize paths for cross-platform compatibility
+        normalized_files = [f.replace("\\", "/") for f in files]
+        assert "README.md" in normalized_files
+        assert "src/main.py" not in normalized_files
         assert len(files) == 1  # Only README.md
 
     def test_multiple_patterns_no_duplicate_files(
@@ -144,7 +148,11 @@ class TestContextManagerAutoSync:
         # Sync should pick up the new file
         added = manager.refresh_files()
         assert added == initial_count + 1  # All files re-added plus new one
-        assert "NEW.md" in manager.get_file_paths(relative=True)
+        # Normalize paths for cross-platform compatibility
+        normalized_files = [
+            f.replace("\\", "/") for f in manager.get_file_paths(relative=True)
+        ]
+        assert "NEW.md" in normalized_files
 
     def test_ignore_patterns_respected_in_auto_sync(
         self, manager: ContextManager, temp_dir: Path
@@ -160,8 +168,10 @@ class TestContextManagerAutoSync:
 
         # Verify test files are not included
         files = manager.get_file_paths(relative=True)
-        assert "tests/test_main.py" not in files
-        assert "src/main.py" in files
+        # Normalize paths for cross-platform compatibility
+        normalized_files = [f.replace("\\", "/") for f in files]
+        assert "tests/test_main.py" not in normalized_files
+        assert "src/main.py" in normalized_files
         assert files_added == 5  # setup.py + 4 source files (non-test)
 
     def test_empty_patterns_behavior(self, manager: ContextManager) -> None:
@@ -193,14 +203,22 @@ class TestContextManagerAutoSync:
 
         # Watch overlapping patterns
         manager.watch_paths(["src/**/*.py", "src/main.py"])
-        assert "src/main.py" in manager.get_file_paths(relative=True)
+        # Normalize paths for cross-platform compatibility
+        normalized_files = [
+            f.replace("\\", "/") for f in manager.get_file_paths(relative=True)
+        ]
+        assert "src/main.py" in normalized_files
 
         # Remove specific pattern
         patterns_removed, files_removed = manager.unwatch_paths(["src/main.py"])
 
         # File should still exist due to other pattern
         assert patterns_removed == 1
-        assert "src/main.py" in manager.get_file_paths(relative=True)
+        # Normalize paths for cross-platform compatibility
+        normalized_files = [
+            f.replace("\\", "/") for f in manager.get_file_paths(relative=True)
+        ]
+        assert "src/main.py" in normalized_files
 
     def test_profile_with_auto_sync(
         self, manager: ContextManager, temp_dir: Path
@@ -245,14 +263,22 @@ class TestContextManagerAutoSync:
         # Refresh to pick up changes
         manager.refresh_files()
         assert len(manager.files) == initial_count + 1
-        assert "changelog.md" in manager.get_file_paths(relative=True)
+        # Normalize paths for cross-platform compatibility
+        normalized_files = [
+            f.replace("\\", "/") for f in manager.get_file_paths(relative=True)
+        ]
+        assert "changelog.md" in normalized_files
 
         # Delete a file
         (temp_dir / "README.md").unlink()
 
         # Refresh should remove deleted file
         manager.refresh_files()
-        assert "README.md" not in manager.get_file_paths(relative=True)
+        # Normalize paths for cross-platform compatibility
+        normalized_files = [
+            f.replace("\\", "/") for f in manager.get_file_paths(relative=True)
+        ]
+        assert "README.md" not in normalized_files
 
     def test_state_persistence_with_auto_sync(
         self, manager: ContextManager, temp_dir: Path
