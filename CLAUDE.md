@@ -13,6 +13,13 @@
 - Run tests with verbose output: `uv run pytest -v`
 - Check coverage: `uv run pytest --cov=contextr --cov-report=term-missing`
 
+## Development Workflow
+- **CI/CD**: Tests run automatically only on PRs to main branch (not on pushes)
+- **Local Validation**: Pre-commit hooks run ruff-format, ruff, and pyright before commits
+- **Setup pre-commit**: `uv run pre-commit install` (run once after cloning)
+- **Run all checks locally**: `uv run pre-commit run --all-files`
+- **Skip pre-commit**: `git commit --no-verify` (use sparingly)
+
 ## Code Style Guidelines
 - **Formatting**: Enforced by Ruff with 88 character line length (matching Black)
 - **Linting**: Ruff checks for F (Pyflakes), E/W (pycodestyle), and I (isort) rules

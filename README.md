@@ -208,10 +208,27 @@ contextr stores its configuration in a `.contextr/` directory in your project:
 
 ## Development
 
+### Workflow
+
+contextr uses a streamlined CI/CD workflow:
+
+- **CI Tests**: Run automatically on pull requests to `main` branch only
+- **Local Validation**: Use pre-commit hooks for instant feedback during development
+- **Release**: Automated PyPI deployment on version tags
+
+### Setup Development Environment
+
 ```bash
 # Install development dependencies
 uv sync --extra dev
 
+# Install pre-commit hooks for local validation
+uv run pre-commit install
+```
+
+### Local Development Commands
+
+```bash
 # Run tests
 uv run pytest
 
@@ -221,7 +238,23 @@ uv run pyright
 # Linting and formatting
 uv run ruff check .
 uv run ruff format .
+
+# Run all pre-commit checks manually
+uv run pre-commit run --all-files
+
+# Bypass pre-commit hooks when needed
+git commit --no-verify -m "Emergency fix"
 ```
+
+### Pre-commit Hooks
+
+The project uses pre-commit hooks to ensure code quality before commits:
+
+- **ruff-format**: Automatically formats code to project standards
+- **ruff**: Checks for code quality issues
+- **pyright**: Performs strict type checking
+
+These hooks run automatically on `git commit`. To skip them in special cases, use `--no-verify`.
 
 ## Why Use contextr?
 

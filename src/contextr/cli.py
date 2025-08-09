@@ -100,14 +100,10 @@ def sync() -> None:
 
     Example: ctxr sync
     """
-    # Store initial file count
-    files_before = len(context_manager.files)
-
-    # Refresh files based on watched patterns
-    total_added = context_manager.refresh_files()
-
-    files_after = len(context_manager.files)
-    files_removed = files_before - files_after + total_added
+    # Refresh files and get accurate added/removed stats
+    stats = context_manager.refresh_watched()
+    total_added = stats.get("added", 0)
+    files_removed = stats.get("removed", 0)
 
     # Show what changed
     if total_added > 0 or files_removed > 0:
@@ -138,7 +134,11 @@ def sync() -> None:
     )
 
     # Copy to clipboard
-    pyperclip.copy(output_text)
+    try:
+        pyperclip.copy(output_text)
+    except Exception as e:
+        console.print(f"[red]Clipboard error:[/red] {e}")
+        return
 
     console.print(
         f"[green]Exported {len(context_manager.files)} files to clipboard![/green]"
@@ -207,6 +207,16 @@ def unignore(
     """
     if context_manager.remove_ignore_pattern(pattern):
         console.print(f"[green]Removed pattern from ignore list: {pattern}[/green]")
+        # Keep context consistent with watch patterns after ignore changes
+        stats = context_manager.refresh_watched()
+        if stats["added"] or stats["removed"]:
+            console.print(
+                f"[blue]Context updated: +{stats['added']} / -{stats['removed']}[/blue]"
+            )
+        if context_manager.files:
+            console.print(
+                get_file_tree(context_manager.files, context_manager.base_dir)
+            )
     else:
         console.print(f"[yellow]Pattern not found in ignore list: {pattern}[/yellow]")
 

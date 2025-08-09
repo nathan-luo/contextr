@@ -1,4 +1,5 @@
 import os
+import platform
 import re
 from pathlib import Path
 from typing import List, Pattern, Set, Tuple
@@ -39,9 +40,9 @@ class IgnoreManager:
                             self.patterns.add(line)
 
         # Pre-compile patterns for efficient matching
-        self._compile_patterns()
+        self.compile_patterns()
 
-    def _compile_patterns(self) -> None:
+    def compile_patterns(self) -> None:
         """Compile all patterns into regex for efficient matching."""
         self._compiled_patterns = []
 
@@ -95,7 +96,10 @@ class IgnoreManager:
             pattern = f"{pattern}$"
 
         # Compile the regex with proper flags
-        return re.compile(pattern, re.IGNORECASE if os.name == "nt" else 0)
+        return re.compile(
+            pattern,
+            re.IGNORECASE if (os.name == "nt" or platform.system() == "Darwin") else 0,
+        )
 
     def should_ignore(self, path: str) -> bool:
         """
@@ -144,7 +148,7 @@ class IgnoreManager:
             self.patterns.add(pattern)
 
         # Recompile patterns and save
-        self._compile_patterns()
+        self.compile_patterns()
         self.save_patterns()
 
     def remove_pattern(self, pattern: str) -> bool:
@@ -167,7 +171,7 @@ class IgnoreManager:
 
         if removed:
             # Recompile patterns and save
-            self._compile_patterns()
+            self.compile_patterns()
             self.save_patterns()
 
         return removed

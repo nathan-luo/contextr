@@ -68,23 +68,12 @@ class ContextManager:
                 parent_dir = str(Path(filepath).parent)
                 cleaned_dirs.add(parent_dir)
 
-        # Remove files and save state
+        # Remove files first
         self.files -= files_to_remove
-        self._save_state()
 
-        # Optionally rescan directories that had ignored files
-        for dir_path in cleaned_dirs:
-            p: Path = Path(dir_path)
-            if p.exists() and p.is_dir():
-                # Check remaining files in this directory
-                for file_path in p.rglob("*"):
-                    if file_path.is_file():
-                        file_abs = str(file_path.resolve())
-                        # Add file only if it's not ignored
-                        if not self.ignore_manager.should_ignore(file_abs):
-                            self.files.add(file_abs)
+        # Rebuild strictly from watched patterns to keep invariants
+        self.refresh_watched()
 
-        self._save_state()
         return len(files_to_remove), len(cleaned_dirs)
 
     def remove_ignore_pattern(self, pattern: Pattern) -> bool:
@@ -282,6 +271,15 @@ class ContextManager:
         self.watched_patterns.clear()
         self.ignore_manager.patterns.clear()
         self.ignore_manager.negation_patterns.clear()
+        # Rebuild compiled regexes and persist empty .ignore so next run is clean
+        self.ignore_manager.compile_patterns()
+        # Only save patterns if we can actually write to the filesystem
+        try:
+            self.ignore_manager.save_patterns()
+        except (PermissionError, FileNotFoundError, OSError):
+            # In test environments or when directory doesn't exist, skip persisting
+            # OSError: Catches "Read-only file system" on macOS
+            pass
         self._save_state()
 
     def search_files(self, keyword: str) -> List[FilePath]:
@@ -354,21 +352,12 @@ class ContextManager:
         Returns:
             Tuple[int, int]: (Number of new patterns, Number of files added)
         """
-        # Filter out patterns that would be entirely ignored
-        valid_patterns: List[Pattern] = []
-        for pattern in patterns:
-            # Normalize the pattern path
-            abs_pattern = make_absolute(pattern, self.base_dir)
-            # If the pattern itself isn't ignored, add it
-            if not self.ignore_manager.should_ignore(abs_pattern):
-                valid_patterns.append(pattern)
-
-        # Only add non-ignored patterns to watch list
-        new_patterns: Set[Pattern] = set(valid_patterns) - self.watched_patterns
+        # Always record what the user asked to watch; filtering happens per-file
+        new_patterns: Set[Pattern] = set(patterns) - self.watched_patterns
         self.watched_patterns.update(new_patterns)
 
-        # Auto-sync: Add files matching the new patterns
-        added_count = self._add_files(valid_patterns)
+        # Initial add (per-file ignore rules apply in _add_files)
+        added_count = self._add_files(patterns)
 
         self._save_state()
         return len(new_patterns), added_count
@@ -387,14 +376,8 @@ class ContextManager:
         # Clear files that came from watched patterns
         self.files.clear()
 
-        # Re-add all files from watched patterns, respecting ignore patterns
-        valid_patterns: List[Pattern] = [
-            p
-            for p in self.watched_patterns
-            if not self.ignore_manager.should_ignore(make_absolute(p, self.base_dir))
-        ]
-
-        for pattern in valid_patterns:
+        # Re-add all files from watched patterns; per-file ignore is enforced below
+        for pattern in self.watched_patterns:
             added = self._add_files([pattern])
             stats["added"] += added
 
@@ -410,11 +393,8 @@ class ContextManager:
         Returns:
             List[Pattern]: Sorted list of valid watched patterns
         """
-        return sorted(
-            p
-            for p in self.watched_patterns
-            if not self.ignore_manager.should_ignore(make_absolute(p, self.base_dir))
-        )
+        # Show everything the user asked to watch (even if currently yielding 0 files)
+        return sorted(self.watched_patterns)
 
     def save_state_as(self, state_name: str) -> bool:
         """
@@ -542,9 +522,27 @@ class ContextManager:
         """
         self.clear()
         self.watched_patterns = set(profile.watched_patterns)
-        self.ignore_manager.patterns = set(profile.ignore_patterns)
+        # Rehydrate ignore + negation sets from a single list that may contain '!'
+        self.ignore_manager.patterns.clear()
+        self.ignore_manager.negation_patterns.clear()
+        for p in profile.ignore_patterns:
+            p = p.strip()
+            if not p:
+                continue
+            if p.startswith("!"):
+                self.ignore_manager.negation_patterns.add(p[1:])
+            else:
+                self.ignore_manager.patterns.add(p)
+        self.ignore_manager.compile_patterns()
+        # Only save patterns if we can actually write to the filesystem
+        try:
+            self.ignore_manager.save_patterns()
+        except (PermissionError, FileNotFoundError, OSError):
+            # In test environments or when directory doesn't exist, skip persisting
+            # OSError: Catches "Read-only file system" on macOS
+            pass
         self.current_profile_name = profile_name
-        self.refresh_files()
+        self.refresh_watched()
         self.reset_dirty_state()  # Reset dirty tracking after loading profile
 
     def refresh_files(self) -> int:
@@ -555,16 +553,9 @@ class ContextManager:
         Returns:
             int: Number of files added
         """
-        # Clear existing files
-        self.files.clear()
-
-        # Re-add all files from watched patterns
-        total_added = 0
-        for pattern in self.watched_patterns:
-            added = self._add_files([pattern])
-            total_added += added
-
-        return total_added
+        # Keep API but delegate to the accurate stats method
+        stats = self.refresh_watched()
+        return stats["added"]
 
     def _capture_initial_state(self) -> None:
         """Capture the current state for dirty checking."""

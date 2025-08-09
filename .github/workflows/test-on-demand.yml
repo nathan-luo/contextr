@@ -1,17 +1,27 @@
-name: CI
+name: Test on Demand
 
 on:
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Platform to test on'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
 
 jobs:
   test:
-    name: Test Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    name: Test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: ${{ fromJson(github.event.inputs.platform == 'all' && '["ubuntu-latest", "windows-latest", "macos-latest"]' || format('["{0}"]', github.event.inputs.platform)) }}
         python-version: ["3.13"]
 
     steps:
@@ -43,7 +53,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13' && github.repository == 'yourusername/contextr'
         with:
           file: ./coverage.xml
           fail_ci_if_error: false
