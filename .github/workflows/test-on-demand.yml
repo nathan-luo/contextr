@@ -1,0 +1,60 @@
+name: Test on Demand
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Platform to test on'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJson(github.event.inputs.platform == 'all' && '["ubuntu-latest", "windows-latest", "macos-latest"]' || format('["{0}"]', github.event.inputs.platform)) }}
+        python-version: ["3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run ruff format check
+        run: uv run ruff format . --check
+
+      - name: Run ruff linting
+        run: uv run ruff check .
+
+      - name: Run pyright type checking
+        run: uv run pyright
+
+      - name: Run tests with coverage
+        run: uv run pytest --cov=contextr --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13' && github.repository == 'yourusername/contextr'
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
