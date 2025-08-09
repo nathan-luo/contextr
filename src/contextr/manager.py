@@ -276,8 +276,9 @@ class ContextManager:
         # Only save patterns if we can actually write to the filesystem
         try:
             self.ignore_manager.save_patterns()
-        except (PermissionError, FileNotFoundError):
+        except (PermissionError, FileNotFoundError, OSError):
             # In test environments or when directory doesn't exist, skip persisting
+            # OSError: Catches "Read-only file system" on macOS
             pass
         self._save_state()
 
@@ -536,8 +537,9 @@ class ContextManager:
         # Only save patterns if we can actually write to the filesystem
         try:
             self.ignore_manager.save_patterns()
-        except (PermissionError, FileNotFoundError):
+        except (PermissionError, FileNotFoundError, OSError):
             # In test environments or when directory doesn't exist, skip persisting
+            # OSError: Catches "Read-only file system" on macOS
             pass
         self.current_profile_name = profile_name
         self.refresh_watched()

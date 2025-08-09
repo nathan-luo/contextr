@@ -41,7 +41,10 @@ def test_add_ignore_doesnt_add_unwatched(tmp_path: Path):
 
     cm.add_ignore_pattern("src/**/generated/")
     # Still only python files per watch pattern
-    assert cm.get_file_paths() == ["src/a.py"]
+    paths = cm.get_file_paths()
+    # Normalize path separators for cross-platform comparison
+    normalized_paths = [p.replace("\\", "/") for p in paths]
+    assert normalized_paths == ["src/a.py"]
 
 
 def test_profile_negation_roundtrip(tmp_path: Path):
@@ -67,9 +70,11 @@ def test_profile_negation_roundtrip(tmp_path: Path):
     profile = pm.load_profile("p1")
     cm.apply_profile(profile, "p1")
     cm.refresh_watched()
-    rels = set(cm.get_file_paths())
-    assert "node_modules/keep/x.js" in rels
-    assert "node_modules/drop/y.js" not in rels
+    rels = cm.get_file_paths()
+    # Normalize path separators for cross-platform comparison
+    normalized_rels = [p.replace("\\", "/") for p in rels]
+    assert "node_modules/keep/x.js" in normalized_rels
+    assert "node_modules/drop/y.js" not in normalized_rels
 
 
 def test_clear_persists_empty_ignore(tmp_path: Path):
