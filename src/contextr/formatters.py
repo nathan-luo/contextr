@@ -1,7 +1,6 @@
 import os
-import re
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Tuple
 
 from rich.console import Console
 from rich.tree import Tree
@@ -93,9 +92,36 @@ def detect_language(file_path: str) -> str:
         ".yaml": "yaml",
         ".yml": "yaml",
         ".toml": "toml",
+        ".ini": "ini",
+        ".env": "properties",
+        ".bat": "batch",
+        ".ps1": "powershell",
     }
 
     return lang_map.get(ext, "text")
+
+
+def _choose_fence(text: str, base: str = "```") -> str:
+    """Choose a fence sequence not present in text."""
+    fence = base
+    while fence in text:
+        fence += "`"
+    return fence
+
+
+def _read_text(path: str, max_bytes: int = 512_000) -> Tuple[str, bool]:
+    """
+    Read up to max_bytes from file as UTF-8 (replace errors).
+    Returns (content, truncated).
+    """
+    try:
+        with open(path, "rb") as fb:
+            raw = fb.read(max_bytes + 1)
+        truncated = len(raw) > max_bytes
+        content = raw[:max_bytes].decode("utf-8", errors="replace")
+        return content, truncated
+    except Exception as e:
+        return f"[ERROR: Unable to read file: {e}]", False
 
 
 def format_export_content(
@@ -103,6 +129,7 @@ def format_export_content(
     base_dir: Path,
     relative: bool = True,
     include_contents: bool = True,
+    max_bytes: int = 512_000,
 ) -> str:
     """
     Format context information for export.
@@ -153,22 +180,13 @@ def format_export_content(
             # Detect language for syntax highlighting
             lang = detect_language(path_str)
 
-            # Add file header with language
             output_parts.append(f"\n### {path_str}")
-            output_parts.append(f"```{lang}")
-
-            # Try to read and add file contents
-            try:
-                with open(fpath, "r", encoding="utf-8") as f:
-                    content = f.read()
-                    # Remove potential backtick confusion by escaping them
-                    # This ensures code blocks terminate properly in markdown
-                    content = re.sub(r"```", "\\`\\`\\`", content)
-                    output_parts.append(content)
-            except Exception as e:
-                output_parts.append(f"[ERROR: Unable to read file: {e}]")
-
-            # Close code block
-            output_parts.append("```")
+            content, truncated = _read_text(fpath, max_bytes=max_bytes)
+            fence = _choose_fence(content, base="```")
+            output_parts.append(f"{fence}{lang}")
+            output_parts.append(content)
+            if truncated:
+                output_parts.append("\n[... truncated ...]")
+            output_parts.append(f"{fence}")
 
     return "\n".join(output_parts)

@@ -108,20 +108,25 @@ class ContextManager:
         if not gitignore_path.exists():
             return 0, []
 
-        # Read .gitignore patterns
+        # Read .gitignore patterns and trim inline comments (pattern " # comment")
+        gitignore_patterns: List[Pattern] = []
         with open(gitignore_path, "r", encoding="utf-8") as f:
-            gitignore_patterns: Set[Pattern] = {
-                line.strip() for line in f if line.strip() and not line.startswith("#")
-            }
+            for line in f:
+                s = line.strip()
+                if not s or s.startswith("#"):
+                    continue
+                # Remove simple inline comments (not escaped)
+                if " #" in s:
+                    s = s.split(" #", 1)[0].rstrip()
+                gitignore_patterns.append(s)
 
-        # Find new patterns
-        new_patterns: Set[Pattern] = gitignore_patterns - self.ignore_manager.patterns
+        existing = set(self.ignore_manager.list_patterns())  # includes '!'-prefixed
+        new_patterns_list = [p for p in gitignore_patterns if p not in existing]
 
-        # Add new patterns
-        for pattern in new_patterns:
+        for pattern in new_patterns_list:
             self.ignore_manager.add_pattern(pattern)
 
-        return len(new_patterns), sorted(new_patterns)
+        return len(new_patterns_list), new_patterns_list
 
     def initialize(self) -> Tuple[bool, bool]:
         """
@@ -187,7 +192,7 @@ class ContextManager:
         except IOError as e:
             console.print(f"[red]Error saving state: {e}[/red]")
 
-    def _add_files(self, patterns: List[Pattern]) -> int:
+    def _add_files(self, patterns: List[Pattern], persist: bool = True) -> int:
         """Internal method to add files, respecting ignore patterns."""
         abs_paths = normalize_paths(patterns, self.base_dir, self.ignore_manager)
         if not abs_paths:
@@ -210,7 +215,8 @@ class ContextManager:
                                 new_files_count += 1
                             self.files.add(file_abs)
 
-        self._save_state()
+        if persist:
+            self._save_state()
         return new_files_count
 
     def _remove_files(self, patterns: List[Pattern]) -> int:
@@ -269,16 +275,11 @@ class ContextManager:
         """
         self.files.clear()
         self.watched_patterns.clear()
-        self.ignore_manager.patterns.clear()
-        self.ignore_manager.negation_patterns.clear()
-        # Rebuild compiled regexes and persist empty .ignore so next run is clean
-        self.ignore_manager.compile_patterns()
-        # Only save patterns if we can actually write to the filesystem
+        # Clear ignore rules and persist empty .ignore
         try:
-            self.ignore_manager.save_patterns()
+            self.ignore_manager.clear_patterns()
         except (PermissionError, FileNotFoundError, OSError):
-            # In test environments or when directory doesn't exist, skip persisting
-            # OSError: Catches "Read-only file system" on macOS
+            # Ignore persistence failures (e.g., read-only FS), keep memory clean
             pass
         self._save_state()
 
@@ -376,13 +377,15 @@ class ContextManager:
         # Clear files that came from watched patterns
         self.files.clear()
 
-        # Re-add all files from watched patterns; per-file ignore is enforced below
+        # Re-add all files from watched patterns; persist once at end
         for pattern in self.watched_patterns:
-            added = self._add_files([pattern])
+            added = self._add_files([pattern], persist=False)
             stats["added"] += added
 
         # Count removed files
         stats["removed"] = len(old_files - self.files)
+        # Single save for the whole refresh
+        self._save_state()
 
         return stats
 
@@ -418,8 +421,12 @@ class ContextManager:
             data = {
                 "files": [make_relative(p, self.base_dir) for p in sorted(self.files)],
                 "watched_patterns": sorted(self.watched_patterns),
-                "ignore_patterns": sorted(self.ignore_manager.patterns),
-                "negation_patterns": sorted(self.ignore_manager.negation_patterns),
+                "ignore_patterns": sorted(
+                    self.ignore_manager.get_normal_patterns_set()
+                ),
+                "negation_patterns": sorted(
+                    self.ignore_manager.get_negation_patterns_set()
+                ),
             }
             self.storage.save(key, data)
             return True
@@ -457,12 +464,10 @@ class ContextManager:
             # Load watched patterns with validation
             self.watched_patterns = set(data.get("watched_patterns", []))
 
-            # Load ignore patterns with validation
-            self.ignore_manager.patterns = set(data.get("ignore_patterns", []))
-            self.ignore_manager.negation_patterns = set(
-                data.get("negation_patterns", [])
-            )
-            self.ignore_manager.save_patterns()  # Update the .ignore file
+            # Load ignore patterns with validation (deterministic order)
+            normals = set(data.get("ignore_patterns", []))
+            negs = set(data.get("negation_patterns", []))
+            self.ignore_manager.set_patterns(normals, negs)
 
             self._save_state()  # Save as current state
             return True
@@ -522,24 +527,20 @@ class ContextManager:
         """
         self.clear()
         self.watched_patterns = set(profile.watched_patterns)
-        # Rehydrate ignore + negation sets from a single list that may contain '!'
-        self.ignore_manager.patterns.clear()
-        self.ignore_manager.negation_patterns.clear()
+        normals: Set[str] = set()
+        negs: Set[str] = set()
         for p in profile.ignore_patterns:
-            p = p.strip()
-            if not p:
+            s = p.strip()
+            if not s:
                 continue
-            if p.startswith("!"):
-                self.ignore_manager.negation_patterns.add(p[1:])
+            if s.startswith("!"):
+                negs.add(s[1:])
             else:
-                self.ignore_manager.patterns.add(p)
-        self.ignore_manager.compile_patterns()
-        # Only save patterns if we can actually write to the filesystem
+                normals.add(s)
         try:
-            self.ignore_manager.save_patterns()
+            self.ignore_manager.set_patterns(normals, negs)
         except (PermissionError, FileNotFoundError, OSError):
-            # In test environments or when directory doesn't exist, skip persisting
-            # OSError: Catches "Read-only file system" on macOS
+            # Safe to ignore persistence errors in test/RO environments
             pass
         self.current_profile_name = profile_name
         self.refresh_watched()
@@ -561,7 +562,8 @@ class ContextManager:
         """Capture the current state for dirty checking."""
         self._initial_state = {
             "watched_patterns": sorted(self.watched_patterns),
-            "ignore_patterns": sorted(self.ignore_manager.patterns),
+            # Ordered ignore list matters for semantics; compare order-sensitive
+            "ignore_patterns": self.ignore_manager.list_patterns(),
         }
         self.is_dirty = False
 
@@ -577,11 +579,6 @@ class ContextManager:
 
         current_state = {
             "watched_patterns": sorted(self.watched_patterns),
-            "ignore_patterns": sorted(self.ignore_manager.patterns),
+            "ignore_patterns": self.ignore_manager.list_patterns(),
         }
-
-        self.is_dirty = (
-            current_state["watched_patterns"] != self._initial_state["watched_patterns"]
-            or current_state["ignore_patterns"]
-            != self._initial_state["ignore_patterns"]
-        )
+        self.is_dirty = current_state != self._initial_state

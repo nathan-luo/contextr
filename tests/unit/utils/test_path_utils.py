@@ -185,8 +185,8 @@ class TestNormalizePaths:
         self, tmp_path: Path, mocker: MockerFixture
     ) -> None:
         """Test error handling for glob pattern processing."""
-        # Mock glob to raise an exception
-        mock_glob = mocker.patch("contextr.utils.path_utils.Path.glob")
+        # Mock glob.glob to raise an exception (normalize_paths uses glob.glob)
+        mock_glob = mocker.patch("contextr.utils.path_utils.glob.glob")
         mock_glob.side_effect = Exception("Glob error")
 
         patterns = ["*.py"]

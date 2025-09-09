@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional
 
 import pyperclip
@@ -7,14 +8,13 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from . import __version__ as VERSION
 from .formatters import format_export_content, get_file_tree
 from .manager import ContextManager
 from .profile import ProfileManager, ProfileNotFoundError
 
 app = typer.Typer(help="ctxr - Share your codebase with Large Language Models")
 console = Console()
-
-VERSION = "1.0.0"
 
 # Global context manager instance
 context_manager = ContextManager()
@@ -94,7 +94,20 @@ def ignore_list() -> None:
 
 
 @app.command(name="sync")
-def sync() -> None:
+def sync(
+    to_file: Optional[Path] = typer.Option(
+        None, "--to-file", "-o", help="Write export to a file"
+    ),
+    no_clipboard: bool = typer.Option(
+        False, "--no-clipboard", help="Skip copying result to clipboard"
+    ),
+    absolute: bool = typer.Option(
+        False, "--absolute", help="Use absolute paths in export"
+    ),
+    no_contents: bool = typer.Option(
+        False, "--no-contents", help="Do not include file contents in export"
+    ),
+) -> None:
     """
     Refresh files from watched patterns and export to clipboard.
 
@@ -129,20 +142,36 @@ def sync() -> None:
     output_text = format_export_content(
         context_manager.files,
         context_manager.base_dir,
-        relative=True,
-        include_contents=True,
+        relative=not absolute,
+        include_contents=not no_contents,
     )
 
-    # Copy to clipboard
-    try:
-        pyperclip.copy(output_text)
-    except Exception as e:
-        console.print(f"[red]Clipboard error:[/red] {e}")
-        return
+    # Write to file if requested
+    wrote_file = False
+    if to_file:
+        try:
+            to_file.write_text(output_text, encoding="utf-8")
+            console.print(f"[green]Saved export to {to_file}[/green]")
+            wrote_file = True
+        except Exception as e:
+            console.print(f"[red]File write error:[/red] {e}")
 
-    console.print(
-        f"[green]Exported {len(context_manager.files)} files to clipboard![/green]"
-    )
+    # Copy to clipboard unless disabled
+    if not no_clipboard:
+        try:
+            pyperclip.copy(output_text)
+            console.print(
+                f"[green]Exported {len(context_manager.files)} files to "
+                "clipboard![/green]"
+            )
+        except Exception as e:
+            if wrote_file:
+                console.print(f"[yellow]Clipboard failed:[/yellow] {e}")
+            else:
+                console.print(
+                    "[yellow]Clipboard failed, printing to stdout...[/yellow]\n"
+                )
+                console.print(output_text)
 
 
 @app.command(name="list")

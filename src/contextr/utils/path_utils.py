@@ -107,7 +107,7 @@ def normalize_paths(
         abs_pattern = make_absolute(expanded_pattern, base_dir)
 
         # Handle glob patterns
-        if any(char in expanded_pattern for char in ["*", "?", "[", "]"]):
+        if glob.has_magic(expanded_pattern):
             try:
                 matched_files = glob.glob(abs_pattern, recursive=True)
 

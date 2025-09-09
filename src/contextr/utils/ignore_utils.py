@@ -1,18 +1,26 @@
 import os
 import platform
 import re
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Pattern, Set, Tuple
+from typing import List, Pattern, Set
+
+
+@dataclass
+class _Rule:
+    raw: str  # pattern string w/o '!' prefix
+    is_negation: bool  # True if rule represents a negation
+    regex: Pattern[str] | None = None
 
 
 class IgnoreManager:
     """
-    Manages ignore patterns with improved git-style pattern support.
+    Manages ignore patterns with git-style pattern semantics.
 
     Features:
-    - Full support for git-style ignore patterns
+    - Ordered rules with "last match wins" semantics
     - Support for directory-specific patterns
-    - Negation patterns with ! prefix
+    - Negation with '!' prefix
     - Proper handling of ** glob patterns
     - Case-insensitive matching on Windows and macOS
     """
@@ -20,41 +28,28 @@ class IgnoreManager:
     def __init__(self, base_dir: Path):
         self.base_dir = base_dir
         self.ignore_file = base_dir / ".contextr" / ".ignore"
-        self.patterns: Set[str] = set()
-        self.negation_patterns: Set[str] = set()  # For patterns starting with !
-        self._compiled_patterns: List[
-            Tuple[Pattern[str], bool]
-        ] = []  # (regex, is_negation)
+        # Ordered list of rules; preserves file order (git-like)
+        self._rules: List[_Rule] = []
         self._load_patterns()
 
     def _load_patterns(self) -> None:
-        """Load patterns from .ignore file and compile them for efficient matching."""
+        """Load rules from .ignore in order and compile them."""
+        self._rules.clear()
         if self.ignore_file.exists():
             with open(self.ignore_file, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
-                    if line and not line.startswith("#"):
-                        if line.startswith("!"):
-                            self.negation_patterns.add(line[1:])  # Remove the !
-                        else:
-                            self.patterns.add(line)
-
-        # Pre-compile patterns for efficient matching
+                    if not line or line.startswith("#"):
+                        continue
+                    is_neg = line.startswith("!")
+                    raw = line[1:] if is_neg else line
+                    self._rules.append(_Rule(raw=raw, is_negation=is_neg))
         self.compile_patterns()
 
     def compile_patterns(self) -> None:
-        """Compile all patterns into regex for efficient matching."""
-        self._compiled_patterns = []
-
-        # Compile normal patterns
-        for pattern in self.patterns:
-            regex = self._pattern_to_regex(pattern)
-            self._compiled_patterns.append((regex, False))
-
-        # Compile negation patterns
-        for pattern in self.negation_patterns:
-            regex = self._pattern_to_regex(pattern)
-            self._compiled_patterns.append((regex, True))
+        """Compile all rules into regex for efficient matching."""
+        for r in self._rules:
+            r.regex = self._pattern_to_regex(r.raw)
 
     def _pattern_to_regex(self, pattern: str) -> Pattern[str]:
         """
@@ -103,8 +98,8 @@ class IgnoreManager:
 
     def should_ignore(self, path: str) -> bool:
         """
-        Check if a path should be ignored based on current patterns.
-        Uses pre-compiled regex patterns for fast matching.
+        Check if a path should be ignored based on current rules.
+        Applies git-style semantics: last matching rule wins.
 
         Args:
             path: Absolute or relative path to check
@@ -113,83 +108,89 @@ class IgnoreManager:
             bool: True if path should be ignored
         """
         try:
-            # Convert to relative path for matching
             rel_path = str(Path(path).resolve().relative_to(self.base_dir.resolve()))
-            # Normalize separators for matching
             rel_path = rel_path.replace("\\", "/")
-
-            # Check against compiled patterns
-            should_ignore = False
-
-            for regex, is_negation in self._compiled_patterns:
-                if regex.search(rel_path):
-                    # Negation patterns override previous matches
-                    should_ignore = not is_negation
-
-                    # If it's a negation pattern that matched, we're done
-                    if is_negation:
-                        return False
-
-            return should_ignore
-
         except (ValueError, OSError):
-            # If path is outside base_dir or other error, don't ignore it
             return False
+
+        ignored = False
+        for r in self._rules:
+            assert r.regex is not None
+            if r.regex.search(rel_path):
+                ignored = not r.is_negation
+        return ignored
 
     def add_pattern(self, pattern: str) -> None:
         """
-        Add a new ignore pattern, handling negation patterns.
-        Recompiles the pattern list for efficient matching.
+        Append a new pattern (preserving order). Accepts negations with leading '!'.
         """
         pattern = pattern.strip()
-        if pattern.startswith("!"):
-            self.negation_patterns.add(pattern[1:])
-        else:
-            self.patterns.add(pattern)
-
-        # Recompile patterns and save
+        if not pattern:
+            return
+        is_neg = pattern.startswith("!")
+        raw = pattern[1:] if is_neg else pattern
+        # Avoid exact duplicate rules
+        if not any((r.raw == raw and r.is_negation == is_neg) for r in self._rules):
+            self._rules.append(_Rule(raw=raw, is_negation=is_neg))
         self.compile_patterns()
         self.save_patterns()
 
     def remove_pattern(self, pattern: str) -> bool:
         """
-        Remove an ignore pattern. Returns True if pattern was found and removed.
-        Recompiles the pattern list for efficient matching.
+        Remove a pattern (matching by raw + negation). Returns True if removed.
         """
         pattern = pattern.strip()
-        removed = False
-
-        if pattern.startswith("!"):
-            pattern = pattern[1:]
-            if pattern in self.negation_patterns:
-                self.negation_patterns.remove(pattern)
-                removed = True
-        else:
-            if pattern in self.patterns:
-                self.patterns.remove(pattern)
-                removed = True
-
+        if not pattern:
+            return False
+        is_neg = pattern.startswith("!")
+        raw = pattern[1:] if is_neg else pattern
+        before = len(self._rules)
+        self._rules = [
+            r for r in self._rules if not (r.raw == raw and r.is_negation == is_neg)
+        ]
+        removed = len(self._rules) != before
         if removed:
-            # Recompile patterns and save
             self.compile_patterns()
             self.save_patterns()
-
         return removed
 
     def save_patterns(self) -> None:
-        """Save current patterns to .ignore file, preserving negation patterns."""
+        """Write rules to .ignore preserving order."""
         self.ignore_file.parent.mkdir(parents=True, exist_ok=True)
         with open(self.ignore_file, "w", encoding="utf-8") as f:
-            # Write normal patterns first
-            for pattern in sorted(self.patterns):
-                f.write(f"{pattern}\n")
-            # Then write negation patterns
-            for pattern in sorted(self.negation_patterns):
-                f.write(f"!{pattern}\n")
+            for r in self._rules:
+                prefix = "!" if r.is_negation else ""
+                f.write(f"{prefix}{r.raw}\n")
 
     def list_patterns(self) -> List[str]:
-        """Get list of current ignore patterns, including negation patterns."""
-        patterns: List[str] = []
-        patterns.extend(sorted(self.patterns))
-        patterns.extend(f"!{pattern}" for pattern in sorted(self.negation_patterns))
-        return patterns
+        """Return patterns in current file order (negations prefixed with '!')."""
+        return [("!" if r.is_negation else "") + r.raw for r in self._rules]
+
+    # --- Helpers for manager/state integration ---
+    def clear_patterns(self) -> None:
+        """Clear all rules and persist an empty .ignore."""
+        self._rules.clear()
+        self.save_patterns()
+        self.compile_patterns()
+
+    def set_patterns(self, normals: Set[str], negations: Set[str]) -> None:
+        """
+        Replace current rules from sets for state/profile hydration.
+        Order for these is deterministic: normals (sorted) then negations (sorted).
+        """
+        self._rules = [
+            _Rule(raw=p.strip(), is_negation=False)
+            for p in sorted({p for p in normals if p.strip()})
+        ]
+        self._rules += [
+            _Rule(raw=p.strip(), is_negation=True)
+            for p in sorted({p for p in negations if p.strip()})
+        ]
+        self.compile_patterns()
+        self.save_patterns()
+
+    def get_normal_patterns_set(self) -> Set[str]:
+        return {r.raw for r in self._rules if not r.is_negation}
+
+    def get_negation_patterns_set(self) -> Set[str]:
+        return {r.raw for r in self._rules if r.is_negation}

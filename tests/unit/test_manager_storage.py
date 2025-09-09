@@ -10,6 +10,7 @@ import pytest
 from contextr.manager import ContextManager
 from contextr.profile import Profile
 from contextr.storage import StorageBackend
+from contextr.utils.ignore_utils import _Rule
 
 
 class MockStorage(StorageBackend):
@@ -234,8 +235,19 @@ class TestContextManagerStorage:
         # Set up initial state
         manager.files = {"/test/file1.py", "/test/file2.py"}
         manager.watched_patterns = {"*.py", "src/**/*.js"}
-        manager.ignore_manager.patterns = {"*.pyc", "__pycache__"}
-        manager.ignore_manager.negation_patterns = {"!important.pyc"}
+        # Set ignore patterns without persistent save (test environment)
+        try:
+            manager.ignore_manager.set_patterns(
+                {"*.pyc", "__pycache__"}, {"important.pyc"}
+            )
+        except OSError:
+            # Fall back to in-memory only for test environment
+            manager.ignore_manager._rules = [
+                _Rule(raw="*.pyc", is_negation=False),
+                _Rule(raw="__pycache__", is_negation=False),
+                _Rule(raw="important.pyc", is_negation=True),
+            ]
+            manager.ignore_manager.compile_patterns()
 
         # Clear context
         manager.clear()
@@ -243,8 +255,7 @@ class TestContextManagerStorage:
         # Verify everything is cleared
         assert len(manager.files) == 0
         assert len(manager.watched_patterns) == 0
-        assert len(manager.ignore_manager.patterns) == 0
-        assert len(manager.ignore_manager.negation_patterns) == 0
+        assert manager.ignore_manager.list_patterns() == []
 
         # Verify state was saved
         assert mock_storage.save_called > 0
@@ -261,7 +272,15 @@ class TestContextManagerStorage:
         # Set up initial state with different patterns
         manager.files = {"/old/file1.py", "/old/file2.py"}
         manager.watched_patterns = {"old/*.py"}
-        manager.ignore_manager.patterns = {"*.old"}
+        # Set ignore patterns without persistent save (test environment)
+        try:
+            manager.ignore_manager.set_patterns({"*.old"}, set())
+        except OSError:
+            # Fall back to in-memory only for test environment
+            manager.ignore_manager._rules = [
+                _Rule(raw="*.old", is_negation=False),
+            ]
+            manager.ignore_manager.compile_patterns()
 
         # Create a profile to apply
         profile = Profile(
@@ -275,7 +294,7 @@ class TestContextManagerStorage:
 
         # Verify context was cleared and profile patterns applied
         assert manager.watched_patterns == {"src/**/*.py", "tests/**/*.py"}
-        assert manager.ignore_manager.patterns == {
+        assert manager.ignore_manager.get_normal_patterns_set() == {
             "*.pyc",
             "__pycache__",
             ".pytest_cache",
@@ -333,12 +352,12 @@ class TestContextManagerStorage:
         # Apply profile first time
         manager.apply_profile(profile, "test-profile")
         first_patterns = manager.watched_patterns.copy()
-        first_ignore = manager.ignore_manager.patterns.copy()
+        first_ignore = manager.ignore_manager.get_normal_patterns_set().copy()
 
         # Apply profile second time
         manager.apply_profile(profile, "test-profile")
         second_patterns = manager.watched_patterns
-        second_ignore = manager.ignore_manager.patterns
+        second_ignore = manager.ignore_manager.get_normal_patterns_set()
 
         # Should be identical
         assert first_patterns == second_patterns
