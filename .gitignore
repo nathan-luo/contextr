@@ -12,5 +12,4 @@ uv.lock
 .venv
 
 # Contextr directory
-.contextr/
 .*_cache/
