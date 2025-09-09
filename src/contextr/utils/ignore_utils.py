@@ -53,46 +53,62 @@ class IgnoreManager:
 
     def _pattern_to_regex(self, pattern: str) -> Pattern[str]:
         """
-        Convert a glob pattern to a regular expression.
-        Handles git-style pattern syntax.
+        Convert a gitignore-style pattern to a regex with segment-aware semantics.
+        Highlights:
+          - Leading '/' anchors to repo root.
+          - Trailing '/' indicates a directory rule, but even without it a segment
+            match implies directory descendants are ignored (git behavior).
+          - '**/' matches ZERO or more directories.
+          - '*' matches within a path segment only (no '/').
+          - '?' matches a single non-'/' character.
+          - Last match wins is handled at evaluation time, not here.
         """
-        # Clean up the pattern
+        # Normalize and strip
         pattern = pattern.strip().replace("\\", "/")
 
-        # Handle directory-only patterns
         dir_only = pattern.endswith("/")
         if dir_only:
             pattern = pattern[:-1]
 
-        # Handle patterns that start with /
+        # Leading slash anchors to root (relative to base_dir)
         anchored = pattern.startswith("/")
         if anchored:
             pattern = pattern[1:]
 
-        # Escape regex special chars, except those we want to use (* and ?)
-        pattern = re.escape(pattern)
+        # Escape regex specials first
+        escaped = re.escape(pattern)
 
-        # Restore wildcards and handle special cases
-        pattern = pattern.replace("\\*\\*/", ".*?/")  # **/ matches any directory
-        pattern = pattern.replace("\\*\\*", ".*?")  # ** matches any path
-        pattern = pattern.replace("\\*", "[^/]*")  # * matches any non-path chars
-        pattern = pattern.replace("\\?", "[^/]")  # ? matches one non-path char
+        # Reintroduce git-style globs.
+        #
+        # IMPORTANT: '**/' must allow ZERO directories. The previous implementation
+        # used '.*?/', which forced at least one dir and broke patterns like a/**/b
+        # (which should match a/b). We use a non-capturing optional group.
+        pattern_regex = (
+            escaped
+            .replace(r"\*\*\/", r"(?:.*/)?")   # **/  -> zero or more directories
+            .replace(r"\*\*", r".*")           # **   -> any chars, including '/'
+            .replace(r"\*", r"[^/]*")          # *    -> any chars except '/'
+            .replace(r"\?", r"[^/]")           # ?    -> single non-'/' char
+        )
 
-        # Anchor the pattern appropriately
-        if anchored:
-            pattern = f"^{pattern}"
-        else:
-            pattern = f"(^|/){pattern}"
+        # Segment-aware anchoring:
+        # - anchored: must match starting at beginning of relpath
+        # - not anchored: allow a segment start boundary anywhere
+        prefix = r"^" if anchored else r"(^|/)"
 
-        # Handle directory-only patterns
-        if dir_only:
-            pattern = f"{pattern}(/|$)"
-        else:
-            pattern = f"{pattern}$"
+        # Suffix:
+        # Git treats a directory-name match (with or without a trailing slash)
+        # as affecting everything inside. Using '(/|$)' here ensures both:
+        #  - exact leaf matches (files or dirs), AND
+        #  - segment matches inside a longer path (…/dir/…).
+        # This gives correct behavior for bare names like 'node_modules'.
+        suffix = r"(/|$)"
+
+        full = f"{prefix}{pattern_regex}{suffix}"
 
         # Compile the regex with proper flags
         return re.compile(
-            pattern,
+            full,
             re.IGNORECASE if (os.name == "nt" or platform.system() == "Darwin") else 0,
         )
 

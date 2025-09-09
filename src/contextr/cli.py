@@ -304,19 +304,19 @@ def init() -> None:
 
     Example: ctxr init
     """
-    created_dir, updated_gitignore = context_manager.initialize()
+    created_dir, _ = context_manager.initialize()
 
     if created_dir:
         console.print("[green]Created .contextr directory[/green]")
     else:
         console.print("[yellow].contextr directory already exists[/yellow]")
 
-    if updated_gitignore:
-        console.print("[green]Added .contextr/ to .gitignore[/green]")
-    elif (context_manager.base_dir / ".gitignore").exists():
-        console.print("[yellow].contextr already in .gitignore[/yellow]")
-    else:
-        console.print("[yellow]No .gitignore file found to update[/yellow]")
+    # We intentionally no longer modify .gitignore by default.
+    console.print(
+        "\n[dim]Note:[/dim] We no longer add [bold].contextr/[/bold] to "
+        "[bold].gitignore[/bold] automatically so teams can sync profiles/state. "
+        "Add it manually if you prefer to keep it untracked."
+    )
 
     console.print("\n[bold green]ctxr is ready to use![/bold green]")
     console.print("\nQuick start:")
@@ -716,6 +716,68 @@ def profile_new(
             console.print(f"\n[red]Failed to create profile '{name}'[/red]")
     else:
         console.print("[yellow]Profile creation cancelled.[/yellow]")
+
+
+# --- Profile helpers ---
+@profile_app.command("show")
+def profile_show(
+    name: str = typer.Argument(..., help="Name of the profile to inspect"),
+) -> None:
+    """
+    Show details of a saved profile (metadata, pattern counts, first few patterns).
+    """
+    profile_manager = ProfileManager(context_manager.storage, context_manager.base_dir)
+    try:
+        profile = profile_manager.load_profile(name)
+    except ProfileNotFoundError:
+        console.print(f"[red]Profile '{name}' not found.[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error loading profile: {e}[/red]")
+        raise typer.Exit(1)
+
+    # Header
+    console.print(f"[bold]Profile:[/bold] {profile.name}")
+    desc = profile.metadata.get("description") or "[dim]No description[/dim]"
+    console.print(f"[bold]Description:[/bold] {desc}")
+
+    created_at = profile.metadata.get("created_at", "")
+    updated_at = profile.metadata.get("updated_at", "")
+    if created_at:
+        try:
+            dtc = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            created_at = dtc.strftime("%Y-%m-%d %H:%M")
+        except ValueError:
+            pass
+    if updated_at:
+        try:
+            dtu = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+            updated_at = dtu.strftime("%Y-%m-%d %H:%M")
+        except ValueError:
+            pass
+    if created_at:
+        console.print(f"[bold]Created:[/bold] {created_at}")
+    if updated_at:
+        console.print(f"[bold]Updated:[/bold] {updated_at}")
+
+    console.print(
+        f"[bold]Watched patterns:[/bold] {len(profile.watched_patterns)} "
+        f"[dim](showing up to 5)[/dim]"
+    )
+    for p in sorted(profile.watched_patterns)[:5]:
+        console.print(f"  - {p}")
+
+    console.print(
+        f"[bold]Ignore patterns:[/bold] {len(profile.ignore_patterns)} "
+        f"[dim](showing up to 5)[/dim]"
+    )
+    for p in sorted(profile.ignore_patterns)[:5]:
+        console.print(f"  - {p}")
+
+    console.print(
+        f"\n[dim]Tip:[/dim] Use [bold]ctxr profile load "
+        f"{profile.name}[/bold] to switch to this profile."
+    )
 
 
 def main() -> None:

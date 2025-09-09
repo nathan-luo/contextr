@@ -130,10 +130,10 @@ class ContextManager:
 
     def initialize(self) -> Tuple[bool, bool]:
         """
-        Initialize .contextr directory and update .gitignore.
+        Initialize .contextr directory (no longer updates .gitignore).
 
         Returns:
-            Tuple[bool, bool]: (Created .contextr, Updated .gitignore)
+            Tuple[bool, bool]: (Created .contextr, Updated .gitignore [always False])
         """
         # TODO: Consider returning a dataclass instead of tuple for clarity
         created_dir = False
@@ -143,18 +143,6 @@ class ContextManager:
         if not self.state_dir.exists():
             self.state_dir.mkdir(parents=True)
             created_dir = True
-
-        # Update .gitignore if it exists
-        gitignore_path = self.base_dir / ".gitignore"
-        if gitignore_path.exists():
-            with open(gitignore_path, "r", encoding="utf-8") as f:
-                content = f.read()
-
-            # Add .contextr/ to .gitignore if not already present
-            if ".contextr/" not in content and ".contextr" not in content:
-                with open(gitignore_path, "a", encoding="utf-8") as f:
-                    f.write("\n# Contextr directory\n.contextr/\n")
-                updated_gitignore = True
 
         return created_dir, updated_gitignore
 

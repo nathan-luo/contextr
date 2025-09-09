@@ -42,3 +42,27 @@ def test_ignore_order_sensitivity(tmp_path: Path) -> None:
     im.add_pattern("!build/")
     im.add_pattern("build/")
     assert im.should_ignore(str(file_a)) is True
+
+
+def test_bare_dir_name_matches_descendants(tmp_path: Path) -> None:
+    """
+    A bare directory name like 'node_modules' should ignore the entire subtree,
+    even without a trailing slash (gitignore semantics).
+    """
+    base = tmp_path
+    im = IgnoreManager(base)
+    im.clear_patterns()
+
+    keep_x = base / "node_modules" / "keep" / "x.js"
+    drop_y = base / "node_modules" / "drop" / "y.js"
+    for p in [keep_x, drop_y]:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("// test", encoding="utf-8")
+
+    im.add_pattern("node_modules")          # no trailing slash
+    assert im.should_ignore(str(drop_y)) is True
+    assert im.should_ignore(str(keep_x)) is True
+
+    # Re-include a subfolder
+    im.add_pattern("!node_modules/keep/")
+    assert im.should_ignore(str(keep_x)) is False
