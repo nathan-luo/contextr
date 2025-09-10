@@ -1,0 +1,21 @@
+{
+    "metadata": {
+        "created_at": "2025-09-09T23:32:36.849214+00:00",
+        "description": "",
+        "updated_at": "2025-09-09T23:32:36.849214+00:00"
+    },
+    "name": "all",
+    "watched_patterns": [
+        "CLAUDE.md",
+        "install.py",
+        "RELEASE.md",
+        "uv.lock",
+        "coverage.xml",
+        "src",
+        "docs",
+        "pyproject.toml",
+        "tests",
+        "htmlcov",
+        "README.md"
+    ]
+}

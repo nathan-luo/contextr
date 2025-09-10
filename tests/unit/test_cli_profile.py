@@ -34,7 +34,6 @@ def sample_profile() -> Profile:
     return Profile(
         name="test-profile",
         watched_patterns=["*.py", "*.md"],
-        ignore_patterns=["*.pyc", "__pycache__"],
         metadata={
             "created_at": "2025-07-25T12:00:00Z",
             "updated_at": "2025-07-25T12:00:00Z",
@@ -71,7 +70,6 @@ class TestProfileDeleteCommand:
         assert "Profile: test-profile" in result.output
         assert "Description: Test profile description" in result.output
         assert "Watched patterns: 2" in result.output
-        assert "Ignore patterns: 2" in result.output
         assert "Created: 2025-07-25 12:00" in result.output
         assert "Delete profile 'test-profile'?" in result.output
         assert "✓ Profile 'test-profile' deleted successfully!" in result.output
@@ -184,7 +182,6 @@ class TestProfileDeleteCommand:
         profile = Profile(
             name="no-desc",
             watched_patterns=["*.py"],
-            ignore_patterns=[],
             metadata={
                 "created_at": "2025-07-25T12:00:00Z",
                 "updated_at": "2025-07-25T12:00:00Z",
@@ -220,7 +217,6 @@ class TestProfileDeleteCommand:
         profile = Profile(
             name="bad-date",
             watched_patterns=["*.py"],
-            ignore_patterns=[],
             metadata={
                 "created_at": "invalid-date",
                 "updated_at": "invalid-date",

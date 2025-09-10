@@ -1,4 +1,8 @@
-"""Profile management for saving and loading context configurations."""
+"""Profile management for saving and loading context configurations.
+
+Profiles are now branch-like: they only track watched patterns and metadata.
+Repo-level ignore rules live in .contextr/.ignore and are not part of a profile.
+"""
 
 import re
 from datetime import datetime, timezone
@@ -34,13 +38,12 @@ class ProfileNotFoundError(ProfileError):
 
 
 class Profile:
-    """Represents a saved context profile."""
+    """Represents a saved context profile (branch-like; no ignore rules)."""
 
     def __init__(
         self,
         name: str,
         watched_patterns: List[Pattern],
-        ignore_patterns: List[Pattern],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Initialize a Profile.
@@ -48,12 +51,11 @@ class Profile:
         Args:
             name: Name of the profile
             watched_patterns: List of patterns being watched
-            ignore_patterns: List of ignore patterns
+            (ignore patterns are repo-level and not part of profiles)
             metadata: Optional metadata dictionary
         """
         self.name = name
         self.watched_patterns = watched_patterns
-        self.ignore_patterns = ignore_patterns
         self.metadata = metadata or self._create_metadata()
 
     def _create_metadata(self) -> Dict[str, Any]:
@@ -70,17 +72,16 @@ class Profile:
         return {
             "name": self.name,
             "watched_patterns": self.watched_patterns,
-            "ignore_patterns": self.ignore_patterns,
             "metadata": self.metadata,
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Profile":
         """Create Profile from dictionary."""
+        # Gracefully ignore legacy "ignore_patterns" if present
         return cls(
             name=data["name"],
             watched_patterns=data.get("watched_patterns", []),
-            ignore_patterns=data.get("ignore_patterns", []),
             metadata=data.get("metadata"),
         )
 
@@ -102,16 +103,14 @@ class ProfileManager:
         self,
         name: ProfileName,
         watched_patterns: List[Pattern],
-        ignore_patterns: List[Pattern],
         description: str = "",
         force: bool = False,
     ) -> bool:
-        """Save current context as a named profile.
+        """Save current context as a named profile (watched patterns only).
 
         Args:
             name: Name for the profile
             watched_patterns: List of watched patterns
-            ignore_patterns: List of ignore patterns
             description: Optional description for the profile
             force: Whether to overwrite existing profile without confirmation
 
@@ -135,11 +134,7 @@ class ProfileManager:
             return False  # Caller should handle confirmation
 
         # Create profile
-        profile = Profile(
-            name=name,
-            watched_patterns=watched_patterns,
-            ignore_patterns=ignore_patterns,
-        )
+        profile = Profile(name=name, watched_patterns=watched_patterns)
 
         # Update description if provided
         if description:
@@ -261,13 +256,11 @@ class ProfileManager:
         table.add_column("Name", style="cyan", no_wrap=True)
         table.add_column("Description", style="white")
         table.add_column("Patterns", style="green")
-        table.add_column("Ignored", style="red")
         table.add_column("Created", style="blue")
 
         for profile in profiles:
             description = profile.metadata.get("description", "")
             patterns_count = len(profile.watched_patterns)
-            ignored_count = len(profile.ignore_patterns)
 
             # Format creation date
             created_at = profile.metadata.get("created_at", "")
@@ -284,7 +277,6 @@ class ProfileManager:
                 profile.name,
                 description or "[dim]No description[/dim]",
                 str(patterns_count),
-                str(ignored_count),
                 created_str,
             )
 

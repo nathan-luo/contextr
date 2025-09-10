@@ -36,24 +36,21 @@ class TestProfile:
         profile = Profile(
             name="test",
             watched_patterns=["*.py"],
-            ignore_patterns=["*.pyc"],
             metadata=metadata,
         )
 
         assert profile.name == "test"
         assert profile.watched_patterns == ["*.py"]
-        assert profile.ignore_patterns == ["*.pyc"]
         assert profile.metadata == metadata
 
     def test_init_without_metadata(self) -> None:
         """Test Profile initialization without metadata."""
         profile = Profile(
-            name="test", watched_patterns=["*.py"], ignore_patterns=["*.pyc"]
+            name="test", watched_patterns=["*.py"]
         )
 
         assert profile.name == "test"
         assert profile.watched_patterns == ["*.py"]
-        assert profile.ignore_patterns == ["*.pyc"]
         assert "created_at" in profile.metadata
         assert "updated_at" in profile.metadata
         assert profile.metadata["description"] == ""
@@ -61,13 +58,12 @@ class TestProfile:
     def test_to_dict(self) -> None:
         """Test converting Profile to dictionary."""
         profile = Profile(
-            name="test", watched_patterns=["*.py"], ignore_patterns=["*.pyc"]
+            name="test", watched_patterns=["*.py"]
         )
         data = profile.to_dict()
 
         assert data["name"] == "test"
         assert data["watched_patterns"] == ["*.py"]
-        assert data["ignore_patterns"] == ["*.pyc"]
         assert "metadata" in data
         assert "created_at" in data["metadata"]
 
@@ -76,7 +72,6 @@ class TestProfile:
         data = {
             "name": "test",
             "watched_patterns": ["*.py"],
-            "ignore_patterns": ["*.pyc"],
             "metadata": {
                 "created_at": "2025-07-25T12:00:00Z",
                 "updated_at": "2025-07-25T12:00:00Z",
@@ -87,7 +82,6 @@ class TestProfile:
 
         assert profile.name == "test"
         assert profile.watched_patterns == ["*.py"]
-        assert profile.ignore_patterns == ["*.pyc"]
         assert profile.metadata["description"] == "Test profile"
 
 
@@ -103,7 +97,6 @@ class TestProfileManager:
         success = profile_manager.save_profile(
             name="test-profile",
             watched_patterns=["*.py"],
-            ignore_patterns=["*.pyc"],
             description="Test description",
         )
 
@@ -113,7 +106,6 @@ class TestProfileManager:
         assert saved_key == "profiles/test-profile"
         assert saved_data["name"] == "test-profile"
         assert saved_data["watched_patterns"] == ["*.py"]
-        assert saved_data["ignore_patterns"] == ["*.pyc"]
         assert saved_data["metadata"]["description"] == "Test description"
 
     def test_save_profile_invalid_name(self, profile_manager: ProfileManager) -> None:
@@ -122,7 +114,6 @@ class TestProfileManager:
             profile_manager.save_profile(
                 name="test profile!",  # Invalid: contains space and !
                 watched_patterns=["*.py"],
-                ignore_patterns=["*.pyc"],
             )
         assert "Invalid profile name" in str(exc_info.value)
 
@@ -133,7 +124,7 @@ class TestProfileManager:
         mock_storage.exists.return_value = True
 
         success = profile_manager.save_profile(
-            name="existing", watched_patterns=["*.py"], ignore_patterns=["*.pyc"]
+            name="existing", watched_patterns=["*.py"]
         )
 
         assert success is False
@@ -159,7 +150,6 @@ class TestProfileManager:
         success = profile_manager.save_profile(
             name="existing",
             watched_patterns=["*.py"],
-            ignore_patterns=["*.pyc"],
             force=True,
         )
 
@@ -181,7 +171,7 @@ class TestProfileManager:
         mock_storage.save.side_effect = IOError("Storage error")
 
         success = profile_manager.save_profile(
-            name="test", watched_patterns=["*.py"], ignore_patterns=[]
+            name="test", watched_patterns=["*.py"]
         )
 
         assert success is False
@@ -211,19 +201,16 @@ class TestProfileManager:
             "profiles/backend": {
                 "name": "backend",
                 "watched_patterns": ["*.py"],
-                "ignore_patterns": ["*.pyc"],
                 "metadata": {"description": "Backend profile"},
             },
             "profiles/frontend": {
                 "name": "frontend",
                 "watched_patterns": ["*.js", "*.tsx"],
-                "ignore_patterns": ["node_modules"],
                 "metadata": {"description": "Frontend profile"},
             },
             "profiles/api": {
                 "name": "api",
                 "watched_patterns": ["*.go"],
-                "ignore_patterns": ["vendor"],
                 "metadata": {"description": "API profile"},
             },
         }
@@ -252,7 +239,6 @@ class TestProfileManager:
                 return {
                     "name": "valid",
                     "watched_patterns": ["*.py"],
-                    "ignore_patterns": [],
                     "metadata": {},
                 }
             else:
@@ -273,7 +259,6 @@ class TestProfileManager:
         profile_data = {
             "name": "test",
             "watched_patterns": ["*.py"],
-            "ignore_patterns": ["*.pyc"],
             "metadata": {"description": "Test profile"},
         }
         mock_storage.load.return_value = profile_data
@@ -282,7 +267,6 @@ class TestProfileManager:
 
         assert profile.name == "test"
         assert profile.watched_patterns == ["*.py"]
-        assert profile.ignore_patterns == ["*.pyc"]
         assert profile.metadata["description"] == "Test profile"
         mock_storage.load.assert_called_once_with("profiles/test")
 
@@ -373,7 +357,6 @@ class TestProfileManager:
             Profile(
                 name="backend",
                 watched_patterns=["*.py", "*.md"],
-                ignore_patterns=["*.pyc"],
                 metadata={
                     "created_at": "2025-07-25T12:00:00Z",
                     "description": "Backend dev",
@@ -382,7 +365,6 @@ class TestProfileManager:
             Profile(
                 name="frontend",
                 watched_patterns=["*.js"],
-                ignore_patterns=[],
                 metadata={"created_at": "invalid-date", "description": ""},
             ),
         ]
@@ -391,7 +373,7 @@ class TestProfileManager:
 
         # Basic checks - Rich Table doesn't expose much for testing
         assert table.title == "Saved Profiles"
-        assert len(table.columns) == 5
+        assert len(table.columns) == 4
 
 
 @pytest.mark.parametrize(
@@ -419,7 +401,7 @@ def test_profile_name_validation_parametrized(
 
 def test_profile_metadata_timestamps() -> None:
     """Test that profile metadata timestamps are properly formatted."""
-    profile = Profile(name="test", watched_patterns=[], ignore_patterns=[])
+    profile = Profile(name="test", watched_patterns=[])
 
     # Check timestamp format
     created_at = profile.metadata["created_at"]

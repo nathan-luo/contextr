@@ -52,19 +52,24 @@ def watch(
 
 @app.command()
 def ignore(
-    pattern: str = typer.Argument(..., help="Pattern to add to .ignore file"),
+    patterns: List[str] = typer.Argument(..., help="Pattern(s) to add to .ignore"),
 ) -> None:
     """
-    Add a pattern to ignore list.
+    Add one or more patterns to the ignore list (.contextr/.ignore).
 
-    Example: ctxr ignore "**/*.log"
+    Examples:
+      ctxr ignore "**/*.log"
+      ctxr ignore "**/__pycache__/**" "*.pyc" "node_modules/"
     """
-    removed_files, cleaned_dirs = context_manager.add_ignore_pattern(pattern)
-    console.print(f"[green]Added pattern to .ignore: {pattern}[/green]")
+    removed_files, cleaned_dirs = context_manager.add_ignore_patterns(patterns)
+    console.print(
+        f"[green]Added {len(patterns)} pattern(s) to .ignore[/green]"
+    )
 
     if removed_files:
         console.print(
-            f"[yellow]Removed {removed_files} existing files matching pattern[/yellow]"
+            f"[yellow]Removed {removed_files} existing files matching "
+            "pattern(s)[/yellow]"
         )
 
     if cleaned_dirs:
@@ -227,16 +232,18 @@ def unwatch(
 
 @app.command(name="unignore")
 def unignore(
-    pattern: str = typer.Argument(..., help="Pattern to remove from ignore list"),
+    patterns: List[str] = typer.Argument(..., help="Pattern(s) to remove from ignore"),
 ) -> None:
     """
-    Remove a pattern from ignore list.
+    Remove one or more patterns from ignore list.
 
-    Example: ctxr unignore "**/*.log"
+    Examples:
+      ctxr unignore "**/*.log"
+      ctxr unignore "node_modules/" "*.pyc"
     """
-    if context_manager.remove_ignore_pattern(pattern):
-        console.print(f"[green]Removed pattern from ignore list: {pattern}[/green]")
-        # Keep context consistent with watch patterns after ignore changes
+    removed = context_manager.remove_ignore_patterns(patterns)
+    if removed:
+        console.print(f"[green]Removed {removed} pattern(s) from .ignore[/green]")
         stats = context_manager.refresh_watched()
         if stats["added"] or stats["removed"]:
             console.print(
@@ -247,7 +254,7 @@ def unignore(
                 get_file_tree(context_manager.files, context_manager.base_dir)
             )
     else:
-        console.print(f"[yellow]Pattern not found in ignore list: {pattern}[/yellow]")
+        console.print("[yellow]No matching patterns found in .ignore[/yellow]")
 
 
 @app.command(name="gis")
@@ -398,9 +405,8 @@ def profile_save(
     # Create ProfileManager instance
     profile_manager = ProfileManager(context_manager.storage, context_manager.base_dir)
 
-    # Get current context state
+    # Only watched patterns are part of a profile
     watched_patterns = list(context_manager.watched_patterns)
-    ignore_patterns = context_manager.list_ignore_patterns()
 
     # Check if profile exists and handle overwrite
     key = f"profiles/{name}"
@@ -415,7 +421,6 @@ def profile_save(
     success = profile_manager.save_profile(
         name=name,
         watched_patterns=watched_patterns,
-        ignore_patterns=ignore_patterns,
         description=description,
         force=force,
     )
@@ -425,7 +430,6 @@ def profile_save(
         if description:
             console.print(f"  Description: {description}")
         console.print(f"  Watched patterns: {len(watched_patterns)}")
-        console.print(f"  Ignore patterns: {len(ignore_patterns)}")
 
         # Update profile tracking state
         context_manager.current_profile_name = name
@@ -503,7 +507,6 @@ def profile_load(
             if len(profile.watched_patterns) > 3:
                 console.print(f"    ... and {len(profile.watched_patterns) - 3} more")
 
-        console.print(f"  Ignore patterns: {len(profile.ignore_patterns)}")
 
         # Show the files now in context
         file_count = len(context_manager.files)
@@ -550,7 +553,6 @@ def profile_delete(
         if profile.metadata.get("description"):
             console.print(f"Description: {profile.metadata['description']}")
         console.print(f"Watched patterns: {len(profile.watched_patterns)}")
-        console.print(f"Ignore patterns: {len(profile.ignore_patterns)}")
 
         # Format creation date
         created_at = profile.metadata.get("created_at", "")
@@ -595,10 +597,6 @@ def profile_new(
     description: str = typer.Option(
         "", "--description", "-d", help="Profile description"
     ),
-    gis: bool = typer.Option(False, "--gis", help="Sync gitignore patterns"),
-    gitignore_sync: bool = typer.Option(
-        False, "--gitignore-sync", help="Sync gitignore patterns (same as --gis)"
-    ),
 ) -> None:
     """
     Create a new profile with interactive pattern entry.
@@ -620,7 +618,6 @@ def profile_new(
             profile_manager.save_profile(
                 name=context_manager.current_profile_name,
                 watched_patterns=list(context_manager.watched_patterns),
-                ignore_patterns=context_manager.list_ignore_patterns(),
                 force=True,
             )
             console.print(
@@ -631,37 +628,9 @@ def profile_new(
             console.print("[yellow]Profile creation cancelled.[/yellow]")
             raise typer.Abort()
 
-    # Clear current context
+    # Clear current context (preserve repo-level ignores)
     console.print("\n[blue]Starting new profile...[/blue]")
-    context_manager.clear()
-
-    # Combine gis and gitignore_sync flags
-    sync_gitignore = gis or gitignore_sync
-
-    # Sync gitignore if requested
-    if sync_gitignore:
-        console.print("\n[cyan]Syncing patterns from .gitignore...[/cyan]")
-        added_count, new_patterns = context_manager.sync_gitignore()
-
-        if added_count > 0:
-            console.print(
-                f"[green]Added {added_count} patterns from .gitignore:[/green]"
-            )
-            for pattern in new_patterns[:5]:  # Show first 5
-                console.print(f"  - {pattern}")
-            if len(new_patterns) > 5:
-                console.print(f"  ... and {len(new_patterns) - 5} more")
-        else:
-            console.print("[yellow]No new patterns found in .gitignore[/yellow]")
-
-    # Show current ignore patterns
-    ignore_patterns = context_manager.list_ignore_patterns()
-    if ignore_patterns:
-        console.print(f"\n[dim]Current ignore patterns ({len(ignore_patterns)}):[/dim]")
-        for pattern in ignore_patterns[:5]:
-            console.print(f"  - {pattern}")
-        if len(ignore_patterns) > 5:
-            console.print(f"  ... and {len(ignore_patterns) - 5} more")
+    context_manager.clear(preserve_ignores=True)
 
     # Interactive pattern entry
     console.print(
@@ -692,7 +661,6 @@ def profile_new(
     if description:
         console.print(f"Description: {description}")
     console.print(f"Watch patterns: {len(watch_patterns)}")
-    console.print(f"Ignore patterns: {len(ignore_patterns)}")
     console.print(f"Files matched: {len(context_manager.files)}")
 
     # Confirm and save
@@ -703,7 +671,6 @@ def profile_new(
         success = profile_manager.save_profile(
             name=name,
             watched_patterns=list(context_manager.watched_patterns),
-            ignore_patterns=ignore_patterns,
             description=description,
             force=True,
         )
@@ -768,16 +735,23 @@ def profile_show(
         console.print(f"  - {p}")
 
     console.print(
-        f"[bold]Ignore patterns:[/bold] {len(profile.ignore_patterns)} "
-        f"[dim](showing up to 5)[/dim]"
+        "[dim]Note: Ignores are repo-level (.contextr/.ignore) and not "
+        "saved in profiles.[/dim]"
     )
-    for p in sorted(profile.ignore_patterns)[:5]:
-        console.print(f"  - {p}")
 
     console.print(
         f"\n[dim]Tip:[/dim] Use [bold]ctxr profile load "
         f"{profile.name}[/bold] to switch to this profile."
     )
+
+
+# New friendly alias for branch-like workflow
+@profile_app.command("checkout")
+def profile_checkout(
+    name: str = typer.Argument(..., help="Profile to checkout")
+) -> None:
+    """Checkout a profile (alias of 'profile load')."""
+    profile_load(name)
 
 
 def main() -> None:

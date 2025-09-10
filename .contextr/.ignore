@@ -7,10 +7,8 @@ wheels/
 .idea/
 uv.lock
 .venv
-.contextr/
-.git
-.bmad-core
-.cursor
 .*_cache/
+htmlcov
 docs
-./
+.covereage
+coverage.xml

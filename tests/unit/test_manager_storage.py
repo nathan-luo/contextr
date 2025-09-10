@@ -226,10 +226,10 @@ class TestContextManagerStorage:
         assert all(isinstance(f, str) for f in saved_state["files"])
         assert all(isinstance(p, str) for p in saved_state["watched_patterns"])
 
-    def test_clear_method(
+    def test_clear_method_preserves_ignores(
         self, manager_with_mock_storage: ContextManager, mock_storage: MockStorage
     ) -> None:
-        """Test clear method clears all context data."""
+        """Test clear method clears context data but preserves ignores by default."""
         manager = manager_with_mock_storage
 
         # Set up initial state
@@ -249,13 +249,14 @@ class TestContextManagerStorage:
             ]
             manager.ignore_manager.compile_patterns()
 
-        # Clear context
+        # Clear context (preserve ignores)
         manager.clear()
 
-        # Verify everything is cleared
+        # Verify files and watched patterns are cleared but ignores remain
         assert len(manager.files) == 0
         assert len(manager.watched_patterns) == 0
-        assert manager.ignore_manager.list_patterns() == []
+        # Ignores are repo-level and persist
+        assert manager.ignore_manager.list_patterns() != []
 
         # Verify state was saved
         assert mock_storage.save_called > 0
@@ -263,20 +264,19 @@ class TestContextManagerStorage:
         assert saved_state["files"] == []
         assert saved_state["watched_patterns"] == []
 
-    def test_apply_profile(
+    def test_apply_profile_preserves_repo_ignores(
         self, manager_with_mock_storage: ContextManager, mock_storage: MockStorage
     ) -> None:
-        """Test apply_profile replaces current context with profile data."""
+        """Test apply_profile replaces watched patterns but preserves repo ignores."""
         manager = manager_with_mock_storage
 
         # Set up initial state with different patterns
         manager.files = {"/old/file1.py", "/old/file2.py"}
         manager.watched_patterns = {"old/*.py"}
-        # Set ignore patterns without persistent save (test environment)
+        # Set initial ignore rule
         try:
             manager.ignore_manager.set_patterns({"*.old"}, set())
         except OSError:
-            # Fall back to in-memory only for test environment
             manager.ignore_manager._rules = [
                 _Rule(raw="*.old", is_negation=False),
             ]
@@ -286,7 +286,6 @@ class TestContextManagerStorage:
         profile = Profile(
             name="test-profile",
             watched_patterns=["src/**/*.py", "tests/**/*.py"],
-            ignore_patterns=["*.pyc", "__pycache__", ".pytest_cache"],
         )
 
         # Apply the profile
@@ -294,11 +293,8 @@ class TestContextManagerStorage:
 
         # Verify context was cleared and profile patterns applied
         assert manager.watched_patterns == {"src/**/*.py", "tests/**/*.py"}
-        assert manager.ignore_manager.get_normal_patterns_set() == {
-            "*.pyc",
-            "__pycache__",
-            ".pytest_cache",
-        }
+        # Repo-level ignores remain untouched
+        assert manager.ignore_manager.get_normal_patterns_set() == {"*.old"}
 
         # Files should be cleared initially by clear() but may be
         # repopulated by refresh_files. The actual file population
@@ -346,19 +342,15 @@ class TestContextManagerStorage:
         profile = Profile(
             name="idempotent-test",
             watched_patterns=["*.md", "docs/**/*.md"],
-            ignore_patterns=["*.tmp"],
         )
 
         # Apply profile first time
         manager.apply_profile(profile, "test-profile")
         first_patterns = manager.watched_patterns.copy()
-        first_ignore = manager.ignore_manager.get_normal_patterns_set().copy()
 
         # Apply profile second time
         manager.apply_profile(profile, "test-profile")
         second_patterns = manager.watched_patterns
-        second_ignore = manager.ignore_manager.get_normal_patterns_set()
 
         # Should be identical
         assert first_patterns == second_patterns
-        assert first_ignore == second_ignore

@@ -1,0 +1,12 @@
+{
+    "ignore_patterns": [],
+    "metadata": {
+        "created_at": "2025-09-09T15:13:01.223544+00:00",
+        "description": "",
+        "updated_at": "2025-09-09T15:13:01.223544+00:00"
+    },
+    "name": "test",
+    "watched_patterns": [
+        "*"
+    ]
+}

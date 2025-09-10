@@ -64,7 +64,7 @@ class TestProfileLoadIntegration:
 
         # Set up initial context
         context_manager.watch_paths(["src/*.py", "*.md"])
-        context_manager.add_ignore_pattern("*.txt")
+        context_manager.add_ignore_patterns(["*.txt"])
 
         # Verify initial state
         assert len(context_manager.files) == 3  # 2 .py files + 1 .md file
@@ -75,7 +75,6 @@ class TestProfileLoadIntegration:
         profile_manager.save_profile(
             name="test-profile",
             watched_patterns=list(context_manager.watched_patterns),
-            ignore_patterns=context_manager.list_ignore_patterns(),
             description="Test profile for integration test",
         )
 
@@ -83,7 +82,8 @@ class TestProfileLoadIntegration:
         context_manager.clear()
         assert len(context_manager.files) == 0
         assert len(context_manager.watched_patterns) == 0
-        assert len(context_manager.list_ignore_patterns()) == 0
+        # Ignores are repo-level; clear preserves them
+        assert len(context_manager.list_ignore_patterns()) == 1
 
         # Load profile
         profile = profile_manager.load_profile("test-profile")
@@ -119,7 +119,6 @@ class TestProfileLoadIntegration:
         profile_manager.save_profile(
             name="frontend",
             watched_patterns=list(context_manager.watched_patterns),
-            ignore_patterns=[],
         )
 
         # Create and save backend profile
@@ -128,7 +127,6 @@ class TestProfileLoadIntegration:
         profile_manager.save_profile(
             name="backend",
             watched_patterns=list(context_manager.watched_patterns),
-            ignore_patterns=[],
         )
 
         # Load frontend profile
@@ -188,14 +186,12 @@ class TestProfileLoadIntegration:
         ignore_patterns = ["**/__pycache__", "*.pyc"]
 
         context_manager.watch_paths(patterns)
-        for pattern in ignore_patterns:
-            context_manager.add_ignore_pattern(pattern)
+        context_manager.add_ignore_patterns(ignore_patterns)
 
         # Save profile
         profile_manager.save_profile(
             name="python-project",
             watched_patterns=list(context_manager.watched_patterns),
-            ignore_patterns=context_manager.list_ignore_patterns(),
         )
 
         # Clear and reload
@@ -203,12 +199,13 @@ class TestProfileLoadIntegration:
         profile = profile_manager.load_profile("python-project")
         context_manager.apply_profile(profile, "python-project")
 
-        # Verify all Python files and README are included
+        # Verify Python files and README are included and ignores remained repo-level
         assert len(context_manager.files) == 6  # 4 .py files + 1 .md + setup.py
         file_paths = context_manager.get_file_paths(relative=True)
         assert any("main.py" in f for f in file_paths)
         assert any("test_main.py" in f for f in file_paths)
         assert "README.md" in file_paths
+        assert set(context_manager.list_ignore_patterns()) == set(ignore_patterns)
 
     def test_profile_data_validation_on_load(
         self,
@@ -220,7 +217,6 @@ class TestProfileLoadIntegration:
         profile_manager.save_profile(
             name="valid-profile",
             watched_patterns=["*.py"],
-            ignore_patterns=["*.pyc"],
         )
 
         # Corrupt the profile data directly in storage
@@ -242,7 +238,6 @@ class TestProfileLoadIntegration:
         profile_manager.save_profile(
             name="metadata-test",
             watched_patterns=["src/**/*.py"],
-            ignore_patterns=["*.pyc"],
             description=description,
         )
 

@@ -45,48 +45,50 @@ class ContextManager:
         self._initial_state: Optional[Dict[str, List[str]]] = None
         self._load_state()
 
-    def add_ignore_pattern(self, pattern: Pattern) -> Tuple[int, int]:
+    def add_ignore_patterns(self, patterns: List[Pattern]) -> Tuple[int, int]:
         """
-        Add a new pattern to .ignore file and update current context.
+        Add new patterns to .ignore and update current context (single refresh).
 
         Args:
-            pattern: Pattern to add (glob-style)
+            patterns: Patterns to add (glob-style)
 
         Returns:
             Tuple[int, int]: (Number of files removed, Number of directories cleaned)
         """
-        self.ignore_manager.add_pattern(pattern)
-
-        # Track both files and directories affected
-        files_to_remove: Set[FilePath] = set()
-        cleaned_dirs: Set[FilePath] = set()
-
-        # First pass: identify files to remove
-        for filepath in self.files:
-            if self.ignore_manager.should_ignore(filepath):
-                files_to_remove.add(filepath)
-                parent_dir = str(Path(filepath).parent)
-                cleaned_dirs.add(parent_dir)
-
-        # Remove files first
-        self.files -= files_to_remove
-
-        # Rebuild strictly from watched patterns to keep invariants
+        for p in patterns:
+            self.ignore_manager.add_pattern(p)
+        before = set(self.files)
         self.refresh_watched()
+        removed = before - self.files
+        cleaned_dirs = {str(Path(p).parent) for p in removed}
+        # Prefer accurate removal count from diff
+        return len(removed), len(cleaned_dirs)
 
-        return len(files_to_remove), len(cleaned_dirs)
+    # Back-compat single-pattern entry point
+    def add_ignore_pattern(self, pattern: Pattern) -> Tuple[int, int]:
+        return self.add_ignore_patterns([pattern])
 
-    def remove_ignore_pattern(self, pattern: Pattern) -> bool:
+    def remove_ignore_patterns(self, patterns: List[Pattern]) -> int:
         """
-        Remove a pattern from .ignore file.
+        Remove patterns from .ignore file (single refresh).
 
         Args:
-            pattern: Pattern to remove
+            patterns: Patterns to remove
 
         Returns:
-            bool: True if pattern was found and removed
+            int: Count of patterns removed
         """
-        return self.ignore_manager.remove_pattern(pattern)
+        removed = 0
+        for p in patterns:
+            if self.ignore_manager.remove_pattern(p):
+                removed += 1
+        # Keep context consistent with watch patterns after ignore changes
+        self.refresh_watched()
+        return removed
+
+    # Back-compat single-pattern removal
+    def remove_ignore_pattern(self, pattern: Pattern) -> bool:
+        return self.remove_ignore_patterns([pattern]) > 0
 
     def list_ignore_patterns(self) -> List[Pattern]:
         """
@@ -251,24 +253,24 @@ class ContextManager:
         self.files.clear()
         self._save_state()
 
-    def clear(self) -> None:
+    def clear(self, preserve_ignores: bool = True) -> None:
         """
-        Clear all context data including files and patterns.
+        Clear context data including files and watched patterns.
+        By default, **preserves** repo-level ignore rules.
 
         Side Effects:
             - Removes all files from current context
             - Clears watched patterns
-            - Clears ignore patterns
+            - Optionally clears ignore patterns
             - Saves empty state to disk
         """
         self.files.clear()
         self.watched_patterns.clear()
-        # Clear ignore rules and persist empty .ignore
-        try:
-            self.ignore_manager.clear_patterns()
-        except (PermissionError, FileNotFoundError, OSError):
-            # Ignore persistence failures (e.g., read-only FS), keep memory clean
-            pass
+        if not preserve_ignores:
+            try:
+                self.ignore_manager.clear_patterns()
+            except (PermissionError, FileNotFoundError, OSError):
+                pass
         self._save_state()
 
     def search_files(self, keyword: str) -> List[FilePath]:
@@ -501,35 +503,21 @@ class ContextManager:
 
     def apply_profile(self, profile: Profile, profile_name: str) -> None:
         """
-        Replace current context with profile data.
+        Replace current context with profile's watched patterns (branch-like checkout).
+        Repo-level ignores are **not** modified.
 
         Args:
             profile: Profile object containing patterns to apply
             profile_name: Name of the profile being loaded
 
         Side Effects:
-            - Clears current context
+            - Clears current context (preserves ignores)
             - Applies profile patterns
             - Triggers automatic file refresh
             - Sets current profile name and resets dirty flag
         """
-        self.clear()
+        self.clear(preserve_ignores=True)
         self.watched_patterns = set(profile.watched_patterns)
-        normals: Set[str] = set()
-        negs: Set[str] = set()
-        for p in profile.ignore_patterns:
-            s = p.strip()
-            if not s:
-                continue
-            if s.startswith("!"):
-                negs.add(s[1:])
-            else:
-                normals.add(s)
-        try:
-            self.ignore_manager.set_patterns(normals, negs)
-        except (PermissionError, FileNotFoundError, OSError):
-            # Safe to ignore persistence errors in test/RO environments
-            pass
         self.current_profile_name = profile_name
         self.refresh_watched()
         self.reset_dirty_state()  # Reset dirty tracking after loading profile
@@ -550,8 +538,6 @@ class ContextManager:
         """Capture the current state for dirty checking."""
         self._initial_state = {
             "watched_patterns": sorted(self.watched_patterns),
-            # Ordered ignore list matters for semantics; compare order-sensitive
-            "ignore_patterns": self.ignore_manager.list_patterns(),
         }
         self.is_dirty = False
 
@@ -565,8 +551,5 @@ class ContextManager:
             self._capture_initial_state()
             return
 
-        current_state = {
-            "watched_patterns": sorted(self.watched_patterns),
-            "ignore_patterns": self.ignore_manager.list_patterns(),
-        }
+        current_state = {"watched_patterns": sorted(self.watched_patterns)}
         self.is_dirty = current_state != self._initial_state

@@ -39,7 +39,7 @@ def test_add_ignore_doesnt_add_unwatched(tmp_path: Path):
     cm.watch_paths(["src/**/*.py"])
     assert len(cm.files) == 1  # just a.py
 
-    cm.add_ignore_pattern("src/**/generated/")
+    cm.add_ignore_patterns(["src/**/generated/"])
     # Still only python files per watch pattern
     paths = cm.get_file_paths()
     # Normalize path separators for cross-platform comparison
@@ -47,25 +47,19 @@ def test_add_ignore_doesnt_add_unwatched(tmp_path: Path):
     assert normalized_paths == ["src/a.py"]
 
 
-def test_profile_negation_roundtrip(tmp_path: Path):
+def test_profile_negation_persists_with_profile_checkout(tmp_path: Path):
     os.chdir(tmp_path)
     state_dir = tmp_path / ".contextr"
     cm = ContextManager(storage=JsonStorage(state_dir))
     touch(tmp_path / "node_modules" / "keep" / "x.js", "x")
     touch(tmp_path / "node_modules" / "drop" / "y.js", "y")
     cm.watch_paths(["**/*.js"])
-    cm.add_ignore_pattern("node_modules/")
-    cm.add_ignore_pattern("!node_modules/keep/")
+    cm.add_ignore_patterns(["node_modules/", "!node_modules/keep/"])
 
     from contextr.profile import ProfileManager
 
     pm = ProfileManager(cm.storage, cm.base_dir)
-    assert pm.save_profile(
-        "p1",
-        watched_patterns=list(cm.watched_patterns),
-        ignore_patterns=cm.list_ignore_patterns(),
-        force=True,
-    )
+    assert pm.save_profile("p1", watched_patterns=list(cm.watched_patterns), force=True)
 
     profile = pm.load_profile("p1")
     cm.apply_profile(profile, "p1")
@@ -77,28 +71,28 @@ def test_profile_negation_roundtrip(tmp_path: Path):
     assert "node_modules/drop/y.js" not in normalized_rels
 
 
-def test_clear_persists_empty_ignore(tmp_path: Path):
+def test_clear_preserves_ignore(tmp_path: Path):
     os.chdir(tmp_path)
     state_dir = tmp_path / ".contextr"
     cm = ContextManager(storage=JsonStorage(state_dir))
 
     # Add some patterns
-    cm.add_ignore_pattern("*.log")
-    cm.add_ignore_pattern("node_modules/")
+    cm.add_ignore_patterns(["*.log", "node_modules/"])
     assert len(cm.list_ignore_patterns()) == 2
 
-    # Clear everything
+    # Clear everything (now preserves ignores)
     cm.clear()
 
-    # Verify ignore file is empty
+    # Verify ignore file still contains patterns
     ignore_file = state_dir / ".ignore"
     assert ignore_file.exists()
     content = ignore_file.read_text()
-    assert content.strip() == ""  # File should be empty
+    lines = [line for line in content.splitlines() if line.strip()]
+    assert set(lines) == {"*.log", "node_modules/"}
 
     # Create new manager to verify persistence
     cm2 = ContextManager(storage=JsonStorage(state_dir))
-    assert len(cm2.list_ignore_patterns()) == 0
+    assert len(cm2.list_ignore_patterns()) == 2
 
 
 def test_watch_patterns_not_filtered(tmp_path: Path):
@@ -107,7 +101,7 @@ def test_watch_patterns_not_filtered(tmp_path: Path):
     cm = ContextManager(storage=JsonStorage(state_dir))
 
     # Add ignore pattern first
-    cm.add_ignore_pattern("src/")
+    cm.add_ignore_patterns(["src/"])
 
     # Watch a pattern that would match the ignore
     cm.watch_paths(["src/**/*.py"])

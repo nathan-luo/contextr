@@ -328,44 +328,6 @@ class TestProfileNewCommand:
                         ["src/**/*.py"]
                     )
 
-    def test_profile_new_with_gis(self, runner, mock_context_manager):
-        """Test profile new with gitignore sync."""
-        # Setup
-        mock_context_manager.is_dirty = False
-        mock_context_manager.clear = MagicMock()
-        mock_context_manager.sync_gitignore = MagicMock(
-            return_value=(3, ["*.log", "*.tmp", "node_modules/"])
-        )
-        mock_context_manager.list_ignore_patterns.return_value = [
-            "*.log",
-            "*.tmp",
-            "node_modules/",
-        ]
-        mock_context_manager.watch_paths = MagicMock()
-        mock_context_manager.reset_dirty_state = MagicMock()
-        mock_context_manager.files = set()
-
-        with patch("contextr.cli.ProfileManager") as MockPM:
-            mock_pm_instance = MockPM.return_value
-            mock_pm_instance.save_profile.return_value = True
-
-            with patch("typer.prompt") as mock_prompt:
-                mock_prompt.side_effect = ["src/**/*.js", ""]
-
-                with patch("typer.confirm") as mock_confirm:
-                    mock_confirm.return_value = True
-
-                    # Run command with --gis flag
-                    result = runner.invoke(
-                        app, ["profile", "new", "--name", "js-profile", "--gis"]
-                    )
-
-                    # Verify
-                    assert result.exit_code == 0
-                    assert "Syncing patterns from .gitignore" in result.stdout
-                    assert "Added 3 patterns from .gitignore" in result.stdout
-                    assert "*.log" in result.stdout
-                    mock_context_manager.sync_gitignore.assert_called_once()
 
     def test_profile_new_with_unsaved_changes(self, runner, mock_context_manager):
         """Test profile new prompts to save unsaved changes."""
@@ -398,8 +360,13 @@ class TestProfileNewCommand:
                     # Verify
                     assert result.exit_code == 0
                     assert "Saved changes to 'old-profile'" in result.stdout
-                    # Verify save was called for old profile
-                    assert mock_pm_instance.save_profile.call_count == 2  # Old + new
+                    # Verify save was called for old profile (without ignores)
+                    # First call saves old profile, second saves new profile  
+                    assert mock_pm_instance.save_profile.call_count == 2
+                    # First call should be old profile with old patterns
+                    first_call = mock_pm_instance.save_profile.call_args_list[0]
+                    assert first_call[1]["name"] == "old-profile"
+                    assert first_call[1]["watched_patterns"] == ["old/**/*.py"]
 
     def test_profile_new_cancel_unsaved_changes(self, runner, mock_context_manager):
         """Test cancelling profile new when unsaved changes exist."""
