@@ -59,7 +59,7 @@ def test_bare_dir_name_matches_descendants(tmp_path: Path) -> None:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("// test", encoding="utf-8")
 
-    im.add_pattern("node_modules")          # no trailing slash
+    im.add_pattern("node_modules")  # no trailing slash
     assert im.should_ignore(str(drop_y)) is True
     assert im.should_ignore(str(keep_x)) is True
 

@@ -328,7 +328,6 @@ class TestProfileNewCommand:
                         ["src/**/*.py"]
                     )
 
-
     def test_profile_new_with_unsaved_changes(self, runner, mock_context_manager):
         """Test profile new prompts to save unsaved changes."""
         # Setup
@@ -361,7 +360,7 @@ class TestProfileNewCommand:
                     assert result.exit_code == 0
                     assert "Saved changes to 'old-profile'" in result.stdout
                     # Verify save was called for old profile (without ignores)
-                    # First call saves old profile, second saves new profile  
+                    # First call saves old profile, second saves new profile
                     assert mock_pm_instance.save_profile.call_count == 2
                     # First call should be old profile with old patterns
                     first_call = mock_pm_instance.save_profile.call_args_list[0]

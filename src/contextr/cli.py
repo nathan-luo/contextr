@@ -62,9 +62,7 @@ def ignore(
       ctxr ignore "**/__pycache__/**" "*.pyc" "node_modules/"
     """
     removed_files, cleaned_dirs = context_manager.add_ignore_patterns(patterns)
-    console.print(
-        f"[green]Added {len(patterns)} pattern(s) to .ignore[/green]"
-    )
+    console.print(f"[green]Added {len(patterns)} pattern(s) to .ignore[/green]")
 
     if removed_files:
         console.print(
@@ -507,7 +505,6 @@ def profile_load(
             if len(profile.watched_patterns) > 3:
                 console.print(f"    ... and {len(profile.watched_patterns) - 3} more")
 
-
         # Show the files now in context
         file_count = len(context_manager.files)
         console.print(f"\n[blue]Context updated with {file_count} files[/blue]")
@@ -748,7 +745,7 @@ def profile_show(
 # New friendly alias for branch-like workflow
 @profile_app.command("checkout")
 def profile_checkout(
-    name: str = typer.Argument(..., help="Profile to checkout")
+    name: str = typer.Argument(..., help="Profile to checkout"),
 ) -> None:
     """Checkout a profile (alias of 'profile load')."""
     profile_load(name)

@@ -84,11 +84,10 @@ class IgnoreManager:
         # used '.*?/', which forced at least one dir and broke patterns like a/**/b
         # (which should match a/b). We use a non-capturing optional group.
         pattern_regex = (
-            escaped
-            .replace(r"\*\*\/", r"(?:.*/)?")   # **/  -> zero or more directories
-            .replace(r"\*\*", r".*")           # **   -> any chars, including '/'
-            .replace(r"\*", r"[^/]*")          # *    -> any chars except '/'
-            .replace(r"\?", r"[^/]")           # ?    -> single non-'/' char
+            escaped.replace(r"\*\*\/", r"(?:.*/)?")  # **/  -> zero or more directories
+            .replace(r"\*\*", r".*")  # **   -> any chars, including '/'
+            .replace(r"\*", r"[^/]*")  # *    -> any chars except '/'
+            .replace(r"\?", r"[^/]")  # ?    -> single non-'/' char
         )
 
         # Segment-aware anchoring:

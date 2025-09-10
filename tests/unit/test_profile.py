@@ -45,9 +45,7 @@ class TestProfile:
 
     def test_init_without_metadata(self) -> None:
         """Test Profile initialization without metadata."""
-        profile = Profile(
-            name="test", watched_patterns=["*.py"]
-        )
+        profile = Profile(name="test", watched_patterns=["*.py"])
 
         assert profile.name == "test"
         assert profile.watched_patterns == ["*.py"]
@@ -57,9 +55,7 @@ class TestProfile:
 
     def test_to_dict(self) -> None:
         """Test converting Profile to dictionary."""
-        profile = Profile(
-            name="test", watched_patterns=["*.py"]
-        )
+        profile = Profile(name="test", watched_patterns=["*.py"])
         data = profile.to_dict()
 
         assert data["name"] == "test"
@@ -170,9 +166,7 @@ class TestProfileManager:
         mock_storage.exists.return_value = False
         mock_storage.save.side_effect = IOError("Storage error")
 
-        success = profile_manager.save_profile(
-            name="test", watched_patterns=["*.py"]
-        )
+        success = profile_manager.save_profile(name="test", watched_patterns=["*.py"])
 
         assert success is False
 
